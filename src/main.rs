@@ -135,7 +135,12 @@ impl OrderListWidget {
                         let order = order_from_tags(event.tags).unwrap();
 
                         let mut state = this.state.write().unwrap();
-                        state.orders.push(order);
+                        state.orders.retain(|o| o.id != order.id);
+
+                        if order.status == Some(Status::Pending) {
+                            state.orders.push(order);
+                        }
+
                         state.loading_state = LoadingState::Loaded;
                         if !state.orders.is_empty() {
                             state.table_state.select(Some(0));
@@ -217,12 +222,6 @@ impl Widget for &OrderListWidget {
     }
 }
 
-// impl From<&Order> for Row<'_> {
-//     fn from(event: &Order) -> Self {
-//         Row::new(vec![event.id.clone(), event.content.clone()])
-//     }
-// }
-
 pub fn order_from_tags(tags: Vec<Tag>) -> Result<Order> {
     let mut order = Order::default();
     for tag in tags {
@@ -230,11 +229,6 @@ pub fn order_from_tags(tags: Vec<Tag>) -> Result<Order> {
         let v = t.get(1).unwrap().as_str();
         match t.first().unwrap().as_str() {
             "d" => {
-                // let id = t.get(1).unwrap().as_str().parse::<Uuid>();
-                // let id = match id {
-                //     core::result::Result::Ok(id) => Some(id),
-                //     Err(_) => None,
-                // };
                 order.id = v.to_string();
             }
             "k" => {
