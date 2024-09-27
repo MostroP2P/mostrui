@@ -1,0 +1,16 @@
+[package]
+name = "mostrui"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Francisco Calderón <fjcalderon@gmail.com>"]
+description = "Mostro P2P TUI client"
+homepage = "https://mostro.network"
+repository = "https://github.com/MostroP2P/mostrui"
+
+[dependencies]
+crossterm = { version = "0.28.1", features = ["event-stream"] }
+mostro-core = "0.6.7"
+nostr-sdk = "0.35.0"
+ratatui = "0.28.1"
+tokio = { version = "1.40.0", features = ["full"] }
