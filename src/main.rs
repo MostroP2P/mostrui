@@ -1,13 +1,15 @@
 use mostro_core::order::{Kind as OrderKind, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
+use ratatui::style::Color;
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, EventStream, KeyCode, KeyEventKind},
     layout::{Constraint, Layout, Rect},
+    style::palette::tailwind::{BLUE, SLATE},
     style::{Style, Stylize},
     text::Line,
-    widgets::{Block, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
+    widgets::{Block, Cell, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
     DefaultTerminal, Frame,
 };
 use std::str::FromStr;
@@ -172,9 +174,11 @@ impl Widget for &OrderListWidget {
 
         // A block with a right-aligned title with the loading state on the right
         let loading_state = Line::from(format!("{:?}", state.loading_state)).right_aligned();
+        let color: Color = Color::from_str("#1D212C").unwrap();
         let block = Block::bordered()
             .title("Orders")
             .title(loading_state)
+            .bg(color)
             .title_bottom("j/k to scroll, q to quit");
 
         // A table with the list of orders
@@ -210,13 +214,30 @@ impl Widget for &OrderListWidget {
             Constraint::Length(12),
             Constraint::Length(15),
             Constraint::Fill(1),
-            Constraint::Length(2),
+            Constraint::Length(3),
         ];
+        let header_style = Style::default().fg(SLATE.c200).bg(BLUE.c900);
+        let selected_style = Style::default().fg(BLUE.c400);
+        let header = [
+            "Id",
+            "Kind",
+            "Code",
+            "Amount",
+            "Fiat Amount",
+            "Payment Method",
+            "+/-",
+        ]
+        .into_iter()
+        .map(Cell::from)
+        .collect::<Row>()
+        .style(header_style)
+        .height(1);
         let table = Table::new(rows, widths)
+            .header(header)
             .block(block)
             .highlight_spacing(HighlightSpacing::Always)
             .highlight_symbol(">>")
-            .highlight_style(Style::new().on_blue());
+            .highlight_style(selected_style);
 
         StatefulWidget::render(table, area, buf, &mut state.table_state);
     }
