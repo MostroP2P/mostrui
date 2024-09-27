@@ -216,7 +216,8 @@ impl Widget for &OrderListWidget {
             Constraint::Fill(1),
             Constraint::Length(3),
         ];
-        let header_style = Style::default().fg(SLATE.c200).bg(BLUE.c900);
+        let color = Color::from_str("#3E6601").unwrap();
+        let header_style = Style::default().fg(SLATE.c200).bg(color);
         let selected_style = Style::default().fg(BLUE.c400);
         let header = [
             "Id",
