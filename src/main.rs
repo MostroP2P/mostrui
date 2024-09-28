@@ -9,7 +9,9 @@ use ratatui::{
     style::palette::tailwind::{BLUE, SLATE},
     style::{Style, Stylize},
     text::Line,
-    widgets::{Block, Cell, HighlightSpacing, Row, StatefulWidget, Table, TableState, Widget},
+    widgets::{
+        Block, Cell, HighlightSpacing, Row, StatefulWidget, Table, TableState, Tabs, Widget,
+    },
     DefaultTerminal, Frame,
 };
 use std::str::FromStr;
@@ -59,6 +61,7 @@ async fn main() -> Result<()> {
 #[derive(Debug, Default)]
 struct App {
     should_quit: bool,
+    selected_tab: usize,
     orders: OrderListWidget,
 }
 
@@ -82,11 +85,38 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        let vertical = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]);
-        let [title_area, body_area] = vertical.areas(frame.area());
-        let title = Line::from("Mostro Order list").centered().bold();
-        frame.render_widget(title, title_area);
-        frame.render_widget(&self.orders, body_area);
+        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]);
+        let [tabs_area, body_area] = vertical.areas(frame.area());
+
+        // Defining tabs labels
+        let tab_titles = ["Orders", "My Trades", "Messages", "Settings"]
+            .iter()
+            .map(|t| Line::from(*t))
+            .collect::<Vec<Line>>();
+
+        let tabs = Tabs::new(tab_titles)
+            .block(Block::bordered().title("Menu"))
+            .select(self.selected_tab)
+            .highlight_style(Style::new().fg(Color::Yellow));
+
+        frame.render_widget(tabs, tabs_area);
+
+        match self.selected_tab {
+            0 => self.render_orders_tab(frame, body_area),
+            1 => self.render_text_tab(frame, body_area, "My Trades"),
+            2 => self.render_text_tab(frame, body_area, "Messages"),
+            3 => self.render_text_tab(frame, body_area, "Settings"),
+            _ => {}
+        }
+    }
+
+    fn render_orders_tab(&self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(&self.orders, area);
+    }
+
+    fn render_text_tab(&self, frame: &mut Frame, area: Rect, text: &str) {
+        let text_line = Line::from(text).centered();
+        frame.render_widget(text_line, area);
     }
 
     fn handle_event(&mut self, event: &Event) {
@@ -96,6 +126,16 @@ impl App {
                     KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
                     KeyCode::Char('j') | KeyCode::Down => self.orders.scroll_down(),
                     KeyCode::Char('k') | KeyCode::Up => self.orders.scroll_up(),
+                    KeyCode::Left => {
+                        if self.selected_tab > 0 {
+                            self.selected_tab -= 1;
+                        }
+                    }
+                    KeyCode::Right => {
+                        if self.selected_tab < 3 {
+                            self.selected_tab += 1;
+                        }
+                    }
                     _ => {}
                 }
             }
