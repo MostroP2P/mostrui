@@ -1078,6 +1078,7 @@ dependencies = [
 name = "mostrui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "crossterm",
  "mostro-core",
  "nostr-sdk 0.35.0",

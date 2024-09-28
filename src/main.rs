@@ -38,9 +38,15 @@ async fn main() -> Result<()> {
     client.add_relay("wss://relay.mostro.network").await?;
     client.connect().await;
 
+    let since = chrono::Utc::now() - chrono::Duration::days(1);
+    let timestamp = since.timestamp();
+    let since = Timestamp::from_secs(timestamp as u64);
+
     let filter = Filter::new()
         .kind(Kind::ParameterizedReplaceable(NOSTR_REPLACEABLE_EVENT_KIND))
+        .custom_tag(SingleLetterTag::lowercase(Alphabet::Y), vec!["mostro"])
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Z), vec!["order"])
+        .since(since)
         .limit(10);
     client.subscribe(vec![filter], None).await?;
 
