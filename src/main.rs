@@ -1,7 +1,9 @@
-use mostro_core::order::{Kind as OrderKind, Status};
+use chrono::{DateTime, Local, TimeZone};
+use mostro_core::order::Status;
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
+use mostrui::my_order::Order;
+use mostrui::util::order_from_tags;
 use nostr_sdk::prelude::*;
-use nostr_sdk::Event as NostrEvent;
 use ratatui::layout::Flex;
 use ratatui::style::Color;
 use ratatui::widgets::{Clear, Paragraph, Wrap};
@@ -23,39 +25,6 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-
-#[derive(Debug, Default, Clone)]
-pub struct Order {
-    id: String,
-    kind: Option<OrderKind>,
-    fiat_code: String,
-    status: Option<Status>,
-    amount: i64,
-    min_amount: Option<i64>,
-    max_amount: Option<i64>,
-    fiat_amount: i64,
-    payment_method: String,
-    premium: i64,
-    created_at: Timestamp,
-}
-
-impl Order {
-    fn sats_amount(&self) -> String {
-        if self.amount == 0 {
-            "Market price".to_string()
-        } else {
-            self.amount.to_string()
-        }
-    }
-
-    fn fiat_amount(&self) -> String {
-        if self.max_amount.is_some() {
-            format!("{}-{}", self.min_amount.unwrap(), self.max_amount.unwrap())
-        } else {
-            self.fiat_amount.to_string()
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -155,14 +124,19 @@ impl App {
                 Ordering::Greater => format!("a {}% premium", order.premium),
             };
             let fiat_amount = order.fiat_amount();
-            let created_at =
-                chrono::NaiveDateTime::from_timestamp(order.created_at.as_u64() as i64, 0);
+            let created_at: DateTime<Local> = Local
+                .timestamp_opt(order.created_at.as_u64() as i64, 0)
+                .unwrap();
             let lines = vec![
                 Line::raw(format!(
                     "Someone is buying sats for {} {} at {} with {}.",
                     fiat_amount, order.fiat_code, sats_amount, premium
                 )),
+                Line::raw(""),
                 Line::raw(format!("The payment method is {}.", order.payment_method)),
+                Line::raw(""),
+                Line::raw(format!("Id: {}", order.id)),
+                Line::raw(""),
                 Line::raw(format!("Created at: {}", created_at)),
             ];
             let paragraph = Paragraph::new(lines)
@@ -303,7 +277,6 @@ impl Widget for &OrderListWidget {
             };
             let fiat_amount = order.fiat_amount();
             Row::new(vec![
-                order.id.clone(),
                 order.kind.unwrap().to_string(),
                 order.fiat_code.clone(),
                 amount,
@@ -313,7 +286,6 @@ impl Widget for &OrderListWidget {
             ])
         });
         let widths = [
-            Constraint::Length(12),
             Constraint::Length(4),
             Constraint::Length(4),
             Constraint::Length(12),
@@ -325,7 +297,6 @@ impl Widget for &OrderListWidget {
         let header_style = Style::default().fg(SLATE.c200).bg(color);
         let selected_style = Style::default().fg(BLUE.c400);
         let header = [
-            "Id",
             "Kind",
             "Code",
             "Amount",
@@ -347,55 +318,6 @@ impl Widget for &OrderListWidget {
 
         StatefulWidget::render(table, area, buf, &mut state.table_state);
     }
-}
-
-pub fn order_from_tags(event: NostrEvent) -> Result<Order> {
-    let tags = event.tags();
-    let mut order = Order::default();
-    order.created_at = event.created_at();
-    for tag in tags {
-        let t = tag.as_slice();
-        let v = t.get(1).unwrap().as_str();
-        match t.first().unwrap().as_str() {
-            "d" => {
-                order.id = v.to_string();
-            }
-            "k" => {
-                order.kind = Some(OrderKind::from_str(v).unwrap());
-            }
-            "f" => {
-                order.fiat_code = v.to_string();
-            }
-            "s" => {
-                order.status = Some(Status::from_str(v).unwrap_or(Status::Dispute));
-            }
-            "amt" => {
-                order.amount = v.parse::<i64>().unwrap();
-            }
-            "fa" => {
-                if v.contains('.') {
-                    continue;
-                }
-                let max = t.get(2);
-                if max.is_some() {
-                    order.min_amount = v.parse::<i64>().ok();
-                    order.max_amount = max.unwrap().parse::<i64>().ok();
-                } else {
-                    let fa = v.parse::<i64>();
-                    order.fiat_amount = fa.unwrap_or(0);
-                }
-            }
-            "pm" => {
-                order.payment_method = v.to_string();
-            }
-            "premium" => {
-                order.premium = v.parse::<i64>().unwrap();
-            }
-            _ => {}
-        }
-    }
-
-    Ok(order)
 }
 
 fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
