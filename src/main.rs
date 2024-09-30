@@ -141,7 +141,10 @@ impl App {
                 Some(i) => state.orders.get(i).unwrap(),
                 None => return,
             };
-            let block = Block::bordered().title("Order details".to_string());
+            let color: Color = Color::from_str("#14161C").unwrap();
+            let block = Block::bordered()
+                .title("Order details".to_string())
+                .bg(color);
             let sats_amount = order.sats_amount();
             let premium = match order.premium.cmp(&0) {
                 Ordering::Equal => "No premium or discount".to_string(),
