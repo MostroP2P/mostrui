@@ -1,7 +1,9 @@
 use mostro_core::order::{Kind as OrderKind, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
+use ratatui::layout::Flex;
 use ratatui::style::Color;
+use ratatui::widgets::Clear;
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, EventStream, KeyCode, KeyEventKind},
@@ -61,6 +63,7 @@ async fn main() -> Result<()> {
 #[derive(Debug, Default)]
 struct App {
     should_quit: bool,
+    show_order: bool,
     selected_tab: usize,
     orders: OrderListWidget,
 }
@@ -108,6 +111,20 @@ impl App {
             3 => self.render_text_tab(frame, body_area, "Settings"),
             _ => {}
         }
+
+        if self.show_order {
+            let popup_area = popup_area(frame.area(), 80, 80);
+            let selected = self.orders.state.read().unwrap().table_state.selected();
+            let state = self.orders.state.read().unwrap();
+            let order = match selected {
+                Some(i) => state.orders.get(i).unwrap(),
+                None => return,
+            };
+
+            let block = Block::bordered().title(order.id.to_string());
+            frame.render_widget(Clear, popup_area);
+            frame.render_widget(block, popup_area);
+        }
     }
 
     fn render_orders_tab(&self, frame: &mut Frame, area: Rect) {
@@ -123,7 +140,7 @@ impl App {
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Press {
                 match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
+                    KeyCode::Char('q') => self.should_quit = true,
                     KeyCode::Char('j') | KeyCode::Down => self.orders.scroll_down(),
                     KeyCode::Char('k') | KeyCode::Up => self.orders.scroll_up(),
                     KeyCode::Left => {
@@ -136,6 +153,8 @@ impl App {
                             self.selected_tab += 1;
                         }
                     }
+                    KeyCode::Enter => self.show_order = true,
+                    KeyCode::Esc => self.show_order = false,
                     _ => {}
                 }
             }
@@ -335,4 +354,12 @@ pub fn order_from_tags(tags: Vec<Tag>) -> Result<Order> {
     }
 
     Ok(order)
+}
+
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
+    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+    let [area] = vertical.areas(area);
+    let [area] = horizontal.areas(area);
+    area
 }
