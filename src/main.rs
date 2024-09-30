@@ -123,7 +123,7 @@ impl App {
             .block(Block::bordered().title("Menu"))
             .bg(color)
             .select(self.selected_tab)
-            .highlight_style(Style::new().fg(Color::Yellow));
+            .highlight_style(Style::new().fg(BLUE.c400));
 
         frame.render_widget(tabs, tabs_area);
 
@@ -146,7 +146,8 @@ impl App {
             let color: Color = Color::from_str("#14161C").unwrap();
             let block = Block::bordered()
                 .title("Order details".to_string())
-                .bg(color);
+                .bg(color)
+                .title_bottom("ESC to close");
             let sats_amount = order.sats_amount();
             let premium = match order.premium.cmp(&0) {
                 Ordering::Equal => "No premium or discount".to_string(),
@@ -291,7 +292,7 @@ impl Widget for &OrderListWidget {
             .title("Orders")
             .title(loading_state)
             .bg(color)
-            .title_bottom("j/k to scroll, q to quit");
+            .title_bottom("j/k to scroll, ENTER to select order, q to quit");
 
         // A table with the list of orders
         let rows = state.orders.iter().map(|order| {
