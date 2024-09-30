@@ -1,9 +1,10 @@
 use mostro_core::order::{Kind as OrderKind, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
+use nostr_sdk::Event as NostrEvent;
 use ratatui::layout::Flex;
 use ratatui::style::Color;
-use ratatui::widgets::Clear;
+use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{Event, EventStream, KeyCode, KeyEventKind},
@@ -16,6 +17,7 @@ use ratatui::{
     },
     DefaultTerminal, Frame,
 };
+use std::cmp::Ordering;
 use std::str::FromStr;
 use std::{
     sync::{Arc, RwLock},
@@ -34,6 +36,25 @@ pub struct Order {
     fiat_amount: i64,
     payment_method: String,
     premium: i64,
+    created_at: Timestamp,
+}
+
+impl Order {
+    fn sats_amount(&self) -> String {
+        if self.amount == 0 {
+            "Market price".to_string()
+        } else {
+            self.amount.to_string()
+        }
+    }
+
+    fn fiat_amount(&self) -> String {
+        if self.max_amount.is_some() {
+            format!("{}-{}", self.min_amount.unwrap(), self.max_amount.unwrap())
+        } else {
+            self.fiat_amount.to_string()
+        }
+    }
 }
 
 #[tokio::main]
@@ -113,17 +134,38 @@ impl App {
         }
 
         if self.show_order {
-            let popup_area = popup_area(frame.area(), 80, 80);
+            let popup_area = popup_area(frame.area(), 50, 80);
             let selected = self.orders.state.read().unwrap().table_state.selected();
             let state = self.orders.state.read().unwrap();
             let order = match selected {
                 Some(i) => state.orders.get(i).unwrap(),
                 None => return,
             };
+            let block = Block::bordered().title("Order details".to_string());
+            let sats_amount = order.sats_amount();
+            let premium = match order.premium.cmp(&0) {
+                Ordering::Equal => "No premium or discount".to_string(),
+                Ordering::Less => format!("a {}% discount", order.premium),
+                Ordering::Greater => format!("a {}% premium", order.premium),
+            };
+            let fiat_amount = order.fiat_amount();
+            let created_at =
+                chrono::NaiveDateTime::from_timestamp(order.created_at.as_u64() as i64, 0);
+            let lines = vec![
+                Line::raw(format!(
+                    "Someone is buying sats for {} {} at {} with {}.",
+                    fiat_amount, order.fiat_code, sats_amount, premium
+                )),
+                Line::raw(format!("The payment method is {}.", order.payment_method)),
+                Line::raw(format!("Created at: {}", created_at)),
+            ];
+            let paragraph = Paragraph::new(lines)
+                .block(block)
+                .cyan()
+                .wrap(Wrap { trim: true });
 
-            let block = Block::bordered().title(order.id.to_string());
             frame.render_widget(Clear, popup_area);
-            frame.render_widget(block, popup_area);
+            frame.render_widget(paragraph, popup_area);
         }
     }
 
@@ -199,7 +241,7 @@ impl OrderListWidget {
                 let this = self.clone();
                 async move {
                     if let RelayPoolNotification::Event { event, .. } = notification {
-                        let order = order_from_tags(event.tags).unwrap();
+                        let order = order_from_tags(*event).unwrap();
 
                         let mut state = this.state.write().unwrap();
                         state.orders.retain(|o| o.id != order.id);
@@ -253,15 +295,7 @@ impl Widget for &OrderListWidget {
             } else {
                 order.amount.to_string()
             };
-            let fiat_amount = if order.max_amount.is_some() {
-                format!(
-                    "{}-{}",
-                    order.min_amount.unwrap(),
-                    order.max_amount.unwrap()
-                )
-            } else {
-                order.fiat_amount.to_string()
-            };
+            let fiat_amount = order.fiat_amount();
             Row::new(vec![
                 order.id.clone(),
                 order.kind.unwrap().to_string(),
@@ -309,8 +343,10 @@ impl Widget for &OrderListWidget {
     }
 }
 
-pub fn order_from_tags(tags: Vec<Tag>) -> Result<Order> {
+pub fn order_from_tags(event: NostrEvent) -> Result<Order> {
+    let tags = event.tags();
     let mut order = Order::default();
+    order.created_at = event.created_at();
     for tag in tags {
         let t = tag.as_slice();
         let v = t.get(1).unwrap().as_str();
