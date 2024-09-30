@@ -28,7 +28,10 @@ use std::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let client = Client::new(&Keys::generate());
+    let terminal = ratatui::init();
+    let app = App::new();
+
+    let client = Client::new(&app.my_keys);
     client.add_relay("wss://relay.mostro.network").await?;
     client.connect().await;
 
@@ -44,14 +47,14 @@ async fn main() -> Result<()> {
         .limit(10);
     client.subscribe(vec![filter], None).await?;
 
-    let terminal = ratatui::init();
-    let app_result = App::default().run(terminal, client).await;
+    let app_result = app.run(terminal, client).await;
     ratatui::restore();
     app_result
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct App {
+    my_keys: Keys,
     should_quit: bool,
     show_order: bool,
     selected_tab: usize,
@@ -60,6 +63,16 @@ struct App {
 
 impl App {
     const FRAMES_PER_SECOND: f32 = 60.0;
+
+    pub fn new() -> Self {
+        Self {
+            my_keys: Keys::generate(),
+            should_quit: false,
+            show_order: false,
+            selected_tab: 0,
+            orders: OrderListWidget::default(),
+        }
+    }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
         self.orders.run(client);
