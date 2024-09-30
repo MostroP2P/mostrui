@@ -117,9 +117,11 @@ impl App {
             .iter()
             .map(|t| Line::from(*t))
             .collect::<Vec<Line>>();
+        let color = Color::from_str("#1D212C").unwrap();
 
         let tabs = Tabs::new(tab_titles)
             .block(Block::bordered().title("Menu"))
+            .bg(color)
             .select(self.selected_tab)
             .highlight_style(Style::new().fg(Color::Yellow));
 
