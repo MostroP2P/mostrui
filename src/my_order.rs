@@ -1,10 +1,10 @@
-use mostro_core::order::{Kind, Status};
+use mostro_core::order::{Kind as OrderKind, Status};
 use nostr_sdk::prelude::*;
 
 #[derive(Debug, Default, Clone)]
 pub struct Order {
     pub id: String,
-    pub kind: Option<Kind>,
+    pub kind: Option<OrderKind>,
     pub fiat_code: String,
     pub status: Option<Status>,
     pub amount: i64,

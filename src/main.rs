@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local, TimeZone};
-use mostro_core::order::Status;
+use mostro_core::order::{Kind as OrderKind, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use mostrui::my_order::Order;
 use mostrui::util::order_from_tags;
@@ -43,8 +43,7 @@ async fn main() -> Result<()> {
         .kind(Kind::ParameterizedReplaceable(NOSTR_REPLACEABLE_EVENT_KIND))
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Y), vec!["mostro"])
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Z), vec!["order"])
-        .since(since)
-        .limit(10);
+        .since(since);
     client.subscribe(vec![filter], None).await?;
 
     let app_result = app.run(terminal, client).await;
@@ -57,6 +56,7 @@ struct App {
     my_keys: Keys,
     should_quit: bool,
     show_order: bool,
+    order_action: bool,
     selected_tab: usize,
     orders: OrderListWidget,
 }
@@ -69,6 +69,7 @@ impl App {
             my_keys: Keys::generate(),
             should_quit: false,
             show_order: false,
+            order_action: false,
             selected_tab: 0,
             orders: OrderListWidget::default(),
         }
@@ -90,19 +91,19 @@ impl App {
         Ok(())
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         let vertical = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]);
         let [tabs_area, body_area] = vertical.areas(frame.area());
 
         // Defining tabs labels
         let tab_titles = ["Orders", "My Trades", "Messages", "Settings"]
             .iter()
-            .map(|t| Line::from(*t))
+            .map(|t| Line::from(*t).bold())
             .collect::<Vec<Line>>();
-        let color = Color::from_str("#1D212C").unwrap();
+        let color = Color::from_str("#304F00").unwrap();
 
         let tabs = Tabs::new(tab_titles)
-            .block(Block::bordered().title("Menu"))
+            .block(Block::bordered().title(" Mostro "))
             .bg(color)
             .select(self.selected_tab)
             .highlight_style(Style::new().fg(BLUE.c400));
@@ -118,18 +119,23 @@ impl App {
         }
 
         if self.show_order {
-            let popup_area = popup_area(frame.area(), 50, 80);
+            let popup_area = popup_area(frame.area(), 50, 60);
             let selected = self.orders.state.read().unwrap().table_state.selected();
             let state = self.orders.state.read().unwrap();
             let order = match selected {
                 Some(i) => state.orders.get(i).unwrap(),
                 None => return,
             };
+            let action = match order.kind {
+                Some(OrderKind::Buy) => "Sell",
+                Some(OrderKind::Sell) => "Buy",
+                _ => "Trade",
+            };
             let color: Color = Color::from_str("#14161C").unwrap();
             let block = Block::bordered()
                 .title("Order details".to_string())
                 .bg(color)
-                .title_bottom("ESC to close");
+                .title_bottom(format!("ESC to close, ENTER to {}", action));
             let sats_amount = order.sats_amount();
             let premium = match order.premium.cmp(&0) {
                 Ordering::Equal => "No premium or discount".to_string(),
@@ -188,7 +194,14 @@ impl App {
                             self.selected_tab += 1;
                         }
                     }
-                    KeyCode::Enter => self.show_order = true,
+                    KeyCode::Enter => {
+                        if self.show_order {
+                            self.show_order = false;
+                            self.order_action = true;
+                        } else {
+                            self.show_order = true;
+                        }
+                    }
                     KeyCode::Esc => self.show_order = false,
                     _ => {}
                 }
@@ -276,18 +289,14 @@ impl Widget for &OrderListWidget {
         let loading_state = Line::from(format!("{:?}", state.loading_state)).right_aligned();
         let color: Color = Color::from_str("#1D212C").unwrap();
         let block = Block::bordered()
-            .title("Orders")
+            .title(" Orders ")
             .title(loading_state)
             .bg(color)
             .title_bottom("j/k to scroll, ENTER to select order, q to quit");
 
         // A table with the list of orders
         let rows = state.orders.iter().map(|order| {
-            let amount = if order.amount == 0 {
-                "Market price".to_string()
-            } else {
-                order.amount.to_string()
-            };
+            let amount = order.sats_amount();
             let fiat_amount = order.fiat_amount();
             Row::new(vec![
                 order.kind.unwrap().to_string(),
@@ -306,7 +315,7 @@ impl Widget for &OrderListWidget {
             Constraint::Fill(1),
             Constraint::Length(3),
         ];
-        let color = Color::from_str("#3E6601").unwrap();
+        let color = Color::from_str("#304F00").unwrap();
         let header_style = Style::default().fg(SLATE.c200).bg(color);
         let selected_style = Style::default().fg(BLUE.c400);
         let header = [
