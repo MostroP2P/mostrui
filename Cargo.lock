@@ -1084,6 +1084,7 @@ dependencies = [
  "nostr-sdk 0.35.0",
  "ratatui",
  "tokio",
+ "tui-textarea",
 ]
 
 [[package]]
@@ -2180,6 +2181,17 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tui-textarea"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29c07084342a575cea919eea996b9658a358c800b03d435df581c1d7c60e065a"
+dependencies = [
+ "crossterm",
+ "ratatui",
+ "unicode-width",
+]
 
 [[package]]
 name = "tungstenite"

@@ -25,6 +25,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use tui_textarea::TextArea;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -52,26 +53,37 @@ async fn main() -> Result<()> {
 }
 
 #[derive(Debug)]
-struct App {
+struct App<'a> {
     my_keys: Keys,
     should_quit: bool,
     show_order: bool,
-    order_action: bool,
     selected_tab: usize,
     orders: OrderListWidget,
+    show_amount_input: bool,
+    amount_input: TextArea<'a>,
+    new_order: Option<Order>,
 }
 
-impl App {
+impl<'a> App<'a> {
     const FRAMES_PER_SECOND: f32 = 60.0;
 
     pub fn new() -> Self {
+        let mut amount_input = TextArea::default();
+        amount_input.set_block(
+            Block::default()
+                .title("Input amount")
+                .borders(ratatui::widgets::Borders::ALL),
+        );
+
         Self {
             my_keys: Keys::generate(),
             should_quit: false,
             show_order: false,
-            order_action: false,
             selected_tab: 0,
             orders: OrderListWidget::default(),
+            show_amount_input: false,
+            amount_input,
+            new_order: None,
         }
     }
 
@@ -116,6 +128,36 @@ impl App {
             2 => self.render_text_tab(frame, body_area, "Messages"),
             3 => self.render_text_tab(frame, body_area, "Settings"),
             _ => {}
+        }
+
+        if self.show_amount_input {
+            let popup_area = popup_area(frame.area(), 50, 20);
+            let block = Block::bordered().title("Amount input").bg(Color::Black);
+            let selected = self.orders.state.read().unwrap().table_state.selected();
+            let state = self.orders.state.read().unwrap();
+            let order = match selected {
+                Some(i) => state.orders.get(i).unwrap(),
+                None => return,
+            };
+            let lines = vec![
+                Line::raw("This is a range order."),
+                Line::raw(format!(
+                    "Please enter an amount between {} {}.",
+                    order.fiat_amount(),
+                    order.fiat_code
+                )),
+            ];
+
+            let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+
+            frame.render_widget(Clear, popup_area);
+            frame.render_widget(paragraph, popup_area);
+
+            // Render input
+            frame.render_widget(
+                &self.amount_input,
+                Rect::new(popup_area.x, popup_area.y + 4, popup_area.width, 3),
+            );
         }
 
         if self.show_order {
@@ -195,15 +237,47 @@ impl App {
                         }
                     }
                     KeyCode::Enter => {
-                        if self.show_order {
-                            self.show_order = false;
-                            self.order_action = true;
+                        // We get the selected order and process it
+                        let selected = self.orders.state.read().unwrap().table_state.selected();
+                        let state = self.orders.state.read().unwrap();
+                        let order = match selected {
+                            Some(i) => state.orders.get(i).unwrap(),
+                            None => return,
+                        };
+                        if self.show_amount_input {
+                            // Procesar la entrada del textarea
+                            let value = self.amount_input.lines()[0].parse::<i64>().unwrap_or(0);
+
+                            if value >= order.min_amount.unwrap_or(10)
+                                && value <= order.max_amount.unwrap_or(500)
+                            {
+                                // Si el valor está dentro del rango permitido, procesa la orden
+                                self.show_amount_input = false;
+                                self.show_order = false;
+                                println!("Order processed!");
+                            } else {
+                                // Aquí puedes mostrar un mensaje de error si es necesario
+                            }
+                        } else if self.show_order {
+                            if order.max_amount.is_some() {
+                                // Show range popup
+                                self.show_amount_input = true;
+                                self.show_order = false;
+                            } else {
+                                // Show popup of order detail
+                                self.show_order = true;
+                            }
                         } else {
+                            // Mostrar popup de detalles de la orden
                             self.show_order = true;
                         }
                     }
                     KeyCode::Esc => self.show_order = false,
-                    _ => {}
+                    _ => {
+                        if self.show_amount_input {
+                            self.amount_input.input(*key); // Manejar eventos de teclado en textarea
+                        }
+                    }
                 }
             }
         }

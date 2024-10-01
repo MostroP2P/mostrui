@@ -17,6 +17,10 @@ pub struct Order {
 }
 
 impl Order {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn sats_amount(&self) -> String {
         if self.amount == 0 {
             "Market price".to_string()
