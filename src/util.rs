@@ -1,12 +1,12 @@
-use crate::my_order::Order;
-use mostro_core::order::{Kind as OrderKind, Status};
+use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use nostr_sdk::prelude::*;
 use std::str::FromStr;
+use uuid::Uuid;
 
 pub fn order_from_tags(event: Event) -> Result<Order> {
     let tags = event.tags;
     let mut order = Order {
-        created_at: event.created_at,
+        created_at: Some(event.created_at.as_u64() as i64),
         ..Default::default()
     };
     for tag in tags {
@@ -14,7 +14,12 @@ pub fn order_from_tags(event: Event) -> Result<Order> {
         let v = t.get(1).unwrap().as_str();
         match t.first().unwrap().as_str() {
             "d" => {
-                order.id = v.to_string();
+                let id = v.parse::<Uuid>();
+                let id = match id {
+                    core::result::Result::Ok(id) => id,
+                    Err(_) => continue,
+                };
+                order.id = Some(id);
             }
             "k" => {
                 order.kind = Some(OrderKind::from_str(v).unwrap());

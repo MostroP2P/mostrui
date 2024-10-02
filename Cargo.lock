@@ -1061,9 +1061,9 @@ dependencies = [
 
 [[package]]
 name = "mostro-core"
-version = "0.6.7"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aeb872aba1146e74329e70a689f78a5b4722368d5e400c429cc4b380222eca96"
+checksum = "389a75ea2e08eeeb37b54156559d0e988cfe23d365310a2253cf428008bb4271"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1085,6 +1085,7 @@ dependencies = [
  "ratatui",
  "tokio",
  "tui-textarea",
+ "uuid",
 ]
 
 [[package]]
