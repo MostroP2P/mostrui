@@ -4,6 +4,7 @@ use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use mostrui::util::order_from_tags;
 use nostr_sdk::prelude::*;
+use nostr_sdk::Kind::ParameterizedReplaceable;
 use ratatui::layout::Flex;
 use ratatui::style::Color;
 use ratatui::widgets::{Clear, Paragraph, Wrap};
@@ -25,7 +26,8 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-use tui_textarea::TextArea;
+use tui_input::backend::crossterm::EventHandler;
+use tui_input::Input;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,7 +43,7 @@ async fn main() -> Result<()> {
     let since = Timestamp::from_secs(timestamp as u64);
 
     let filter = Filter::new()
-        .kind(Kind::ParameterizedReplaceable(NOSTR_REPLACEABLE_EVENT_KIND))
+        .kind(ParameterizedReplaceable(NOSTR_REPLACEABLE_EVENT_KIND))
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Y), vec!["mostro"])
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Z), vec!["order"])
         .since(since);
@@ -53,31 +55,31 @@ async fn main() -> Result<()> {
 }
 
 #[derive(Debug)]
-struct App<'a> {
+struct App {
     my_keys: Keys,
+    mostro_pubkey: PublicKey,
     should_quit: bool,
     show_order: bool,
     selected_tab: usize,
     orders: OrderListWidget,
     show_amount_input: bool,
     show_invoice_input: bool,
-    amount_input: TextArea<'a>,
+    amount_input: Input,
     new_order: Option<Order>,
 }
 
-impl<'a> App<'a> {
+impl App {
     const FRAMES_PER_SECOND: f32 = 60.0;
 
     pub fn new() -> Self {
-        let mut amount_input = TextArea::default();
-        amount_input.set_block(
-            Block::default()
-                .title("Input amount")
-                .borders(ratatui::widgets::Borders::ALL),
-        );
+        let amount_input = Input::default();
+        let mostro_pubkey =
+            PublicKey::from_str("npub1ykvsmrmw2hk7jgxgy64zr8tfkx4nnjhq9eyfxdlg3caha3ph0skq6jr3z0")
+                .unwrap();
 
         Self {
             my_keys: Keys::generate(),
+            mostro_pubkey,
             should_quit: false,
             show_order: false,
             selected_tab: 0,
@@ -141,19 +143,15 @@ impl<'a> App<'a> {
                 Line::raw("If you agree with the above, enter a lightning invoice."),
             ];
             let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
-
+            let input_paragraph = Paragraph::new(vec![Line::from(self.amount_input.value())])
+                .block(Block::default().borders(ratatui::widgets::Borders::ALL))
+                .wrap(Wrap { trim: true });
             frame.render_widget(Clear, popup_area);
             frame.render_widget(paragraph, popup_area);
 
             // Render input
             frame.render_widget(
-                &self.amount_input,
-                Rect::new(popup_area.x, popup_area.y + 4, popup_area.width, 3),
-            );
-
-            // Render input
-            frame.render_widget(
-                &self.amount_input,
+                input_paragraph,
                 Rect::new(popup_area.x, popup_area.y + 4, popup_area.width, 3),
             );
         }
@@ -177,13 +175,15 @@ impl<'a> App<'a> {
             ];
 
             let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
-
+            let input_paragraph = Paragraph::new(vec![Line::from(self.amount_input.value())])
+                .block(Block::default().borders(ratatui::widgets::Borders::ALL))
+                .wrap(Wrap { trim: true });
             frame.render_widget(Clear, popup_area);
             frame.render_widget(paragraph, popup_area);
 
             // Render input
             frame.render_widget(
-                &self.amount_input,
+                input_paragraph,
                 Rect::new(popup_area.x, popup_area.y + 4, popup_area.width, 3),
             );
         }
@@ -273,7 +273,8 @@ impl<'a> App<'a> {
                         };
                         if self.show_amount_input {
                             // Process textarea input
-                            let value = self.amount_input.lines()[0].parse::<i64>().unwrap_or(0);
+                            // let value = self.amount_input.lines()[0].parse::<i64>().unwrap_or(0);
+                            let value = self.amount_input.value().parse::<i64>().unwrap_or(0);
 
                             if value >= order.min_amount.unwrap_or(10)
                                 && value <= order.max_amount.unwrap_or(500)
@@ -292,15 +293,19 @@ impl<'a> App<'a> {
                                 self.show_order = false;
                             } else {
                                 // Not a range order
-                                // let take_sell_message =
-                                //     Message::new_order(Some(*order_id), Action::TakeSell, content)
-                                //         .as_json()
-                                //         .unwrap();
-                                self.show_invoice_input = true;
+                                let take_sell_message = Message::new_order(
+                                    Some(order.id.unwrap()),
+                                    Action::TakeSell,
+                                    None,
+                                )
+                                .as_json()
+                                .unwrap();
+                                println!("take sell message: {:?}", take_sell_message);
                                 if order.kind == Some(OrderKind::Buy) {
                                     println!("not range buy order");
                                 } else {
                                     println!("not range sell order");
+                                    self.show_invoice_input = true;
                                 }
                                 self.show_order = false;
                             }
@@ -312,7 +317,7 @@ impl<'a> App<'a> {
                     KeyCode::Esc => self.show_order = false,
                     _ => {
                         if self.show_amount_input {
-                            self.amount_input.input(*key); // Handle keyboard events in textarea
+                            self.amount_input.handle_event(&Event::Key(*key)); // Handle keyboard events in textarea
                         }
                     }
                 }
@@ -358,9 +363,8 @@ impl OrderListWidget {
                 let this = self.clone();
                 async move {
                     if let RelayPoolNotification::Event { event, .. } = notification {
-                        let order = order_from_tags(*event).unwrap();
-
                         let mut state = this.state.write().unwrap();
+                        let order = order_from_tags(*event).unwrap();
                         state.orders.retain(|o| o.id != order.id);
 
                         if order.status == Some(Status::Pending) {

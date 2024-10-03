@@ -1084,7 +1084,7 @@ dependencies = [
  "nostr-sdk 0.35.0",
  "ratatui",
  "tokio",
- "tui-textarea",
+ "tui-input",
  "uuid",
 ]
 
@@ -2184,12 +2184,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
-name = "tui-textarea"
-version = "0.6.1"
+name = "tui-input"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29c07084342a575cea919eea996b9658a358c800b03d435df581c1d7c60e065a"
+checksum = "bd137780d743c103a391e06fe952487f914b299a4fe2c3626677f6a6339a7c6b"
 dependencies = [
- "crossterm",
  "ratatui",
  "unicode-width",
 ]
