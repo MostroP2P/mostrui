@@ -41,16 +41,30 @@ async fn main() -> Result<()> {
     let since = chrono::Utc::now() - chrono::Duration::days(1);
     let timestamp = since.timestamp();
     let since = Timestamp::from_secs(timestamp as u64);
-
+    // Here subscribe to get orders
+    let orders_sub_id = SubscriptionId::new("orders-sub-id");
     let filter = Filter::new()
+        .author(app.mostro_pubkey)
         .kind(ParameterizedReplaceable(NOSTR_REPLACEABLE_EVENT_KIND))
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Y), vec!["mostro"])
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Z), vec!["order"])
         .since(since);
-    client.subscribe(vec![filter], None).await?;
+    client
+        .subscribe_with_id(orders_sub_id, vec![filter], None)
+        .await?;
 
+    // Here subscribe to get messages
+    let messages_sub_id = SubscriptionId::new("messages-sub-id");
+    let filter = Filter::new()
+        .pubkey(app.my_keys.public_key())
+        .kinds([Kind::GiftWrap, Kind::PrivateDirectMessage])
+        .since(since);
+    client
+        .subscribe_with_id(messages_sub_id, vec![filter], None)
+        .await?;
     let app_result = app.run(terminal, client).await;
     ratatui::restore();
+
     app_result
 }
 
@@ -62,10 +76,12 @@ struct App {
     show_order: bool,
     selected_tab: usize,
     orders: OrderListWidget,
+    mostro_messages: MostroListWidget,
+    // dm: nostr_sdk::Event,
     show_amount_input: bool,
     show_invoice_input: bool,
     amount_input: Input,
-    new_order: Option<Order>,
+    // new_order: Option<Order>,
 }
 
 impl App {
@@ -84,10 +100,11 @@ impl App {
             show_order: false,
             selected_tab: 0,
             orders: OrderListWidget::default(),
+            mostro_messages: MostroListWidget::default(),
             show_amount_input: false,
             show_invoice_input: false,
             amount_input,
-            new_order: None,
+            // new_order: None,
         }
     }
 
@@ -129,7 +146,7 @@ impl App {
         match self.selected_tab {
             0 => self.render_orders_tab(frame, body_area),
             1 => self.render_text_tab(frame, body_area, "My Trades"),
-            2 => self.render_text_tab(frame, body_area, "Messages"),
+            2 => self.render_mostro_messages_tab(frame, body_area),
             3 => self.render_text_tab(frame, body_area, "Settings"),
             _ => {}
         }
@@ -241,6 +258,10 @@ impl App {
         frame.render_widget(&self.orders, area);
     }
 
+    fn render_mostro_messages_tab(&self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(&self.mostro_messages, area);
+    }
+
     fn render_text_tab(&self, frame: &mut Frame, area: Rect, text: &str) {
         let text_line = Line::from(text).centered();
         frame.render_widget(text_line, area);
@@ -327,6 +348,119 @@ impl App {
 }
 
 #[derive(Debug, Clone, Default)]
+struct MostroListWidget {
+    state: Arc<RwLock<MostroListState>>,
+}
+
+#[derive(Debug, Default)]
+struct MostroListState {
+    messages: Vec<nostr_sdk::Event>,
+    loading_state: LoadingState,
+    table_state: TableState,
+}
+
+impl MostroListWidget {
+    /// Start fetching the orders in the background.
+    ///
+    /// This method spawns a background task that fetches the orders from the Nostr relay.
+    fn run(&self, client: Client) {
+        let this = self.clone();
+        tokio::spawn(this.fetch_dms(client));
+    }
+
+    async fn fetch_dms(self, client: Client) {
+        self.set_loading_state(LoadingState::Loading);
+
+        client
+            .handle_notifications(move |notification| {
+                let this = self.clone();
+                async move {
+                    if let RelayPoolNotification::Event {
+                        subscription_id,
+                        event,
+                        ..
+                    } = notification
+                    {
+                        if subscription_id == SubscriptionId::new("messages-sub-id") {
+                            if event.kind == Kind::GiftWrap {
+                                this.handle_dm_event(*event)?;
+                            } else if event.kind == Kind::PrivateDirectMessage {
+                                this.handle_dm_event(*event)?;
+                            }
+                        }
+                    }
+                    Ok(false)
+                }
+            })
+            .await
+            .unwrap();
+    }
+
+    fn set_loading_state(&self, state: LoadingState) {
+        self.state.write().unwrap().loading_state = state;
+    }
+
+    fn scroll_down(&self) {
+        self.state.write().unwrap().table_state.scroll_down_by(1);
+    }
+
+    fn scroll_up(&self) {
+        self.state.write().unwrap().table_state.scroll_up_by(1);
+    }
+
+    fn handle_dm_event(&self, event: nostr_sdk::Event) -> Result<()> {
+        println!("DM event: {:?}", event);
+        Ok(())
+    }
+}
+
+impl Widget for &MostroListWidget {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let mut state = self.state.write().unwrap();
+
+        // A block with a right-aligned title with the loading state on the right
+        let loading_state = Line::from(format!("{:?}", state.loading_state)).right_aligned();
+        let color: Color = Color::from_str("#1D212C").unwrap();
+        let block = Block::bordered()
+            .title(" DMs ")
+            .title(loading_state)
+            .bg(color)
+            .title_bottom("j/k to scroll, ENTER to select order, q to quit");
+
+        // A table with the list of orders
+        let rows = state.messages.iter().map(|event| {
+            Row::new(vec![
+                event.kind.to_string(),
+                event.pubkey.to_string(),
+                event.created_at.to_string(),
+            ])
+        });
+        let widths = [
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+        ];
+        let color = Color::from_str("#304F00").unwrap();
+        let header_style = Style::default().fg(SLATE.c200).bg(color);
+        let selected_style = Style::default().fg(BLUE.c400);
+        let header = ["Kind", "Pubkey", "Created At"]
+            .into_iter()
+            .map(Cell::from)
+            .collect::<Row>()
+            .style(header_style)
+            .height(1);
+        let table = Table::new(rows, widths)
+            .header(header)
+            .block(block)
+            .highlight_spacing(HighlightSpacing::Always)
+            .highlight_symbol(">>")
+            .highlight_style(selected_style);
+
+        StatefulWidget::render(table, area, buf, &mut state.table_state);
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 struct OrderListWidget {
     state: Arc<RwLock<OrderListState>>,
 }
@@ -362,18 +496,14 @@ impl OrderListWidget {
             .handle_notifications(move |notification| {
                 let this = self.clone();
                 async move {
-                    if let RelayPoolNotification::Event { event, .. } = notification {
-                        let mut state = this.state.write().unwrap();
-                        let order = order_from_tags(*event).unwrap();
-                        state.orders.retain(|o| o.id != order.id);
-
-                        if order.status == Some(Status::Pending) {
-                            state.orders.push(order);
-                        }
-
-                        state.loading_state = LoadingState::Loaded;
-                        if !state.orders.is_empty() {
-                            state.table_state.select(Some(0));
+                    if let RelayPoolNotification::Event {
+                        subscription_id,
+                        event,
+                        ..
+                    } = notification
+                    {
+                        if subscription_id == SubscriptionId::new("orders-sub-id") {
+                            this.handle_order_event(*event)?;
                         }
                     }
                     Ok(false)
@@ -393,6 +523,23 @@ impl OrderListWidget {
 
     fn scroll_up(&self) {
         self.state.write().unwrap().table_state.scroll_up_by(1);
+    }
+
+    fn handle_order_event(&self, event: nostr_sdk::Event) -> Result<()> {
+        let order = order_from_tags(event)?;
+        let mut state = self.state.write().unwrap();
+        state.orders.retain(|o| o.id != order.id);
+
+        if order.status == Some(Status::Pending) {
+            state.orders.push(order);
+        }
+
+        state.loading_state = LoadingState::Loaded;
+        if !state.orders.is_empty() {
+            state.table_state.select(Some(0));
+        }
+
+        Ok(())
     }
 }
 
