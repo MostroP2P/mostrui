@@ -2,6 +2,7 @@ use chrono::{DateTime, Local, TimeZone};
 use mostro_core::message::{Action, Message};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
+use mostrui::nip59::gift_wrap;
 use mostrui::util::order_from_tags;
 use nostr_sdk::prelude::*;
 use nostr_sdk::Kind::ParameterizedReplaceable;
@@ -118,7 +119,7 @@ impl App {
         while !self.should_quit {
             tokio::select! {
                 _ = interval.tick() => { terminal.draw(|frame| self.draw(frame))?; },
-                Some(Ok(event)) = events.next() => self.handle_event(&event),
+                Some(Ok(event)) = events.next() => self.handle_event(&event, client),
             }
         }
         Ok(())
@@ -267,7 +268,7 @@ impl App {
         frame.render_widget(text_line, area);
     }
 
-    fn handle_event(&mut self, event: &Event) {
+    fn handle_event(&mut self, event: &Event, client: Client) {
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Press {
                 match key.code {
@@ -322,6 +323,17 @@ impl App {
                                 .as_json()
                                 .unwrap();
                                 println!("take sell message: {:?}", take_sell_message);
+                                let event = gift_wrap(
+                                    &self.my_keys,
+                                    self.mostro_pubkey,
+                                    take_sell_message,
+                                    None,
+                                    0,
+                                )
+                                .unwrap();
+                                let msg = ClientMessage::event(event);
+                                // here we send the message to be broadcasted
+                                // client.send_msg(msg).await;
                                 if order.kind == Some(OrderKind::Buy) {
                                     println!("not range buy order");
                                 } else {
