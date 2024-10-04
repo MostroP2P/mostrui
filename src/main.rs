@@ -110,7 +110,7 @@ impl App {
     }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
-        self.orders.run(client);
+        self.orders.run(client.clone());
 
         let period = Duration::from_secs_f32(1.0 / Self::FRAMES_PER_SECOND);
         let mut interval = tokio::time::interval(period);
@@ -119,7 +119,7 @@ impl App {
         while !self.should_quit {
             tokio::select! {
                 _ = interval.tick() => { terminal.draw(|frame| self.draw(frame))?; },
-                Some(Ok(event)) = events.next() => self.handle_event(&event, client),
+                Some(Ok(event)) = events.next() => self.handle_event(&event, client.clone()),
             }
         }
         Ok(())
