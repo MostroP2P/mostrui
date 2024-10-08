@@ -69,7 +69,8 @@ pub fn gift_wrap_from_seal(
     let b64decoded_content = general_purpose::STANDARD.encode(encrypted_content);
     EventBuilder::new(Kind::GiftWrap, b64decoded_content, tags)
         .custom_created_at(Timestamp::tweaked(nip59::RANGE_RANDOM_TIMESTAMP_TWEAK))
-        .to_pow_event(&ephemeral_keys, pow)
+        .pow(pow)
+        .to_event(&ephemeral_keys)
 }
 
 pub fn unwrap_gift_wrap(

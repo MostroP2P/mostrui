@@ -2,7 +2,7 @@ use chrono::{DateTime, Local, TimeZone};
 use mostro_core::message::{Action, Message};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
-use mostrui::nip59::gift_wrap;
+use mostrui::nip59::{gift_wrap, unwrap_gift_wrap};
 use mostrui::util::order_from_tags;
 use nostr_sdk::prelude::*;
 use nostr_sdk::Kind::ParameterizedReplaceable;
@@ -36,7 +36,9 @@ async fn main() -> Result<()> {
     let app = App::new();
 
     let client = Client::new(&app.my_keys);
-    client.add_relay("wss://relay.mostro.network").await?;
+    // Uncomment this to work with the mostro relay
+    // client.add_relay("wss://relay.mostro.network").await?;
+    client.add_relay("ws://localhost:7000").await?;
     client.connect().await;
 
     let since = chrono::Utc::now() - chrono::Duration::days(1);
@@ -77,8 +79,7 @@ struct App {
     show_order: bool,
     selected_tab: usize,
     orders: OrderListWidget,
-    mostro_messages: MostroListWidget,
-    // dm: nostr_sdk::Event,
+    messages: MostroListWidget,
     show_amount_input: bool,
     show_invoice_input: bool,
     amount_input: Input,
@@ -90,18 +91,26 @@ impl App {
 
     pub fn new() -> Self {
         let amount_input = Input::default();
+        // Uncomment this to work with the mostro mainnet daemon
+        // let mostro_pubkey = PublicKey::from_str("npub1ykvsmrmw2hk7jgxgy64zr8tfkx4nnjhq9eyfxdlg3caha3ph0skq6jr3z0")
         let mostro_pubkey =
-            PublicKey::from_str("npub1ykvsmrmw2hk7jgxgy64zr8tfkx4nnjhq9eyfxdlg3caha3ph0skq6jr3z0")
+            PublicKey::from_str("npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape")
                 .unwrap();
 
         Self {
-            my_keys: Keys::generate(),
+            // You can use your own keys here
+            // TODO: generate keys for each order (maker or taker)
+            // pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
+            my_keys: Keys::parse(
+                "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b",
+            )
+            .unwrap(),
             mostro_pubkey,
             should_quit: false,
             show_order: false,
             selected_tab: 0,
             orders: OrderListWidget::default(),
-            mostro_messages: MostroListWidget::default(),
+            messages: MostroListWidget::default(),
             show_amount_input: false,
             show_invoice_input: false,
             amount_input,
@@ -111,6 +120,7 @@ impl App {
 
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
         self.orders.run(client.clone());
+        self.messages.run(client.clone(), self.my_keys.clone());
 
         let period = Duration::from_secs_f32(1.0 / Self::FRAMES_PER_SECOND);
         let mut interval = tokio::time::interval(period);
@@ -119,7 +129,7 @@ impl App {
         while !self.should_quit {
             tokio::select! {
                 _ = interval.tick() => { terminal.draw(|frame| self.draw(frame))?; },
-                Some(Ok(event)) = events.next() => self.handle_event(&event, client.clone()),
+                Some(Ok(event)) = events.next() => self.handle_event(&event, client.clone()).await,
             }
         }
         Ok(())
@@ -147,7 +157,7 @@ impl App {
         match self.selected_tab {
             0 => self.render_orders_tab(frame, body_area),
             1 => self.render_text_tab(frame, body_area, "My Trades"),
-            2 => self.render_mostro_messages_tab(frame, body_area),
+            2 => self.render_messages_tab(frame, body_area),
             3 => self.render_text_tab(frame, body_area, "Settings"),
             _ => {}
         }
@@ -259,8 +269,8 @@ impl App {
         frame.render_widget(&self.orders, area);
     }
 
-    fn render_mostro_messages_tab(&self, frame: &mut Frame, area: Rect) {
-        frame.render_widget(&self.mostro_messages, area);
+    fn render_messages_tab(&self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(&self.messages, area);
     }
 
     fn render_text_tab(&self, frame: &mut Frame, area: Rect, text: &str) {
@@ -268,7 +278,7 @@ impl App {
         frame.render_widget(text_line, area);
     }
 
-    fn handle_event(&mut self, event: &Event, client: Client) {
+    async fn handle_event(&mut self, event: &Event, client: Client) {
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Press {
                 match key.code {
@@ -333,7 +343,7 @@ impl App {
                                 .unwrap();
                                 let msg = ClientMessage::event(event);
                                 // here we send the message to be broadcasted
-                                // client.send_msg(msg).await;
+                                let _ = client.send_msg_to(vec!["ws://localhost:7000"], msg).await;
                                 if order.kind == Some(OrderKind::Buy) {
                                     println!("not range buy order");
                                 } else {
@@ -366,26 +376,36 @@ struct MostroListWidget {
 
 #[derive(Debug, Default)]
 struct MostroListState {
-    messages: Vec<nostr_sdk::Event>,
+    messages: Vec<DM>,
     loading_state: LoadingState,
     table_state: TableState,
+}
+
+#[derive(Debug)]
+struct DM {
+    id: String,
+    kind: Kind,
+    sender: PublicKey,
+    content: String,
+    created_at: u64,
 }
 
 impl MostroListWidget {
     /// Start fetching the orders in the background.
     ///
     /// This method spawns a background task that fetches the orders from the Nostr relay.
-    fn run(&self, client: Client) {
+    fn run(&self, client: Client, my_keys: Keys) {
         let this = self.clone();
-        tokio::spawn(this.fetch_dms(client));
+        tokio::spawn(this.fetch_dms(client, my_keys));
     }
 
-    async fn fetch_dms(self, client: Client) {
+    async fn fetch_dms(self, client: Client, my_keys: Keys) {
         self.set_loading_state(LoadingState::Loading);
 
         client
             .handle_notifications(move |notification| {
                 let this = self.clone();
+                let my_keys = my_keys.clone();
                 async move {
                     if let RelayPoolNotification::Event {
                         subscription_id,
@@ -393,12 +413,11 @@ impl MostroListWidget {
                         ..
                     } = notification
                     {
-                        if subscription_id == SubscriptionId::new("messages-sub-id") {
-                            if event.kind == Kind::GiftWrap {
-                                this.handle_dm_event(*event)?;
-                            } else if event.kind == Kind::PrivateDirectMessage {
-                                this.handle_dm_event(*event)?;
-                            }
+                        if subscription_id == SubscriptionId::new("messages-sub-id")
+                            && event.kind == Kind::GiftWrap
+                            || event.kind == Kind::PrivateDirectMessage
+                        {
+                            this.handle_message_event(*event, my_keys)?;
                         }
                     }
                     Ok(false)
@@ -420,8 +439,36 @@ impl MostroListWidget {
         self.state.write().unwrap().table_state.scroll_up_by(1);
     }
 
-    fn handle_dm_event(&self, event: nostr_sdk::Event) -> Result<()> {
-        println!("DM event: {:?}", event);
+    fn handle_message_event(&self, event: nostr_sdk::Event, my_keys: Keys) -> Result<()> {
+        match event.kind {
+            Kind::GiftWrap => {
+                let unwrapped_gift = match unwrap_gift_wrap(Some(&my_keys), None, None, &event) {
+                    Ok(u) => u,
+                    Err(_) => {
+                        return Err("Error unwrapping gift".into());
+                    }
+                };
+                let dm = DM {
+                    id: event.id.to_string(),
+                    kind: event.kind,
+                    sender: unwrapped_gift.sender,
+                    content: unwrapped_gift.rumor.content,
+                    created_at: unwrapped_gift.rumor.created_at.as_u64(),
+                };
+                let mut state = self.state.write().unwrap();
+                state.messages.retain(|m| m.id != dm.id);
+
+                state.messages.push(dm);
+                state.loading_state = LoadingState::Loaded;
+
+                if !state.messages.is_empty() {
+                    state.table_state.select(Some(0));
+                }
+            }
+            Kind::PrivateDirectMessage => !todo!("Handle PrivateDirectMessage"),
+            _ => {}
+        }
+
         Ok(())
     }
 }
@@ -440,11 +487,11 @@ impl Widget for &MostroListWidget {
             .title_bottom("j/k to scroll, ENTER to select order, q to quit");
 
         // A table with the list of orders
-        let rows = state.messages.iter().map(|event| {
+        let rows = state.messages.iter().map(|dm| {
             Row::new(vec![
-                event.kind.to_string(),
-                event.pubkey.to_string(),
-                event.created_at.to_string(),
+                dm.sender.to_string(),
+                dm.content.clone(),
+                dm.created_at.to_string(),
             ])
         });
         let widths = [
@@ -455,7 +502,7 @@ impl Widget for &MostroListWidget {
         let color = Color::from_str("#304F00").unwrap();
         let header_style = Style::default().fg(SLATE.c200).bg(color);
         let selected_style = Style::default().fg(BLUE.c400);
-        let header = ["Kind", "Pubkey", "Created At"]
+        let header = ["Sender", "Content", "Created At"]
             .into_iter()
             .map(Cell::from)
             .collect::<Row>()
