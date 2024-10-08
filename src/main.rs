@@ -30,6 +30,13 @@ use std::{
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
 
+// Uncomment this to work with the mostro mainnet daemon
+// const MOSTRO_PUBKEY: &str = "npub1ykvsmrmw2hk7jgxgy64zr8tfkx4nnjhq9eyfxdlg3caha3ph0skq6jr3z0";
+const MOSTRO_PUBKEY: &str = "npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape";
+// TODO: generate keys for each order (maker or taker)
+// pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
+const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let terminal = ratatui::init();
@@ -91,20 +98,10 @@ impl App {
 
     pub fn new() -> Self {
         let amount_input = Input::default();
-        // Uncomment this to work with the mostro mainnet daemon
-        // let mostro_pubkey = PublicKey::from_str("npub1ykvsmrmw2hk7jgxgy64zr8tfkx4nnjhq9eyfxdlg3caha3ph0skq6jr3z0")
-        let mostro_pubkey =
-            PublicKey::from_str("npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape")
-                .unwrap();
+        let mostro_pubkey = PublicKey::from_str(MOSTRO_PUBKEY).unwrap();
 
         Self {
-            // You can use your own keys here
-            // TODO: generate keys for each order (maker or taker)
-            // pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
-            my_keys: Keys::parse(
-                "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b",
-            )
-            .unwrap(),
+            my_keys: Keys::parse(MY_PRIVATE_KEY).unwrap(),
             mostro_pubkey,
             should_quit: false,
             show_order: false,
@@ -283,8 +280,20 @@ impl App {
             if key.kind == KeyEventKind::Press {
                 match key.code {
                     KeyCode::Char('q') => self.should_quit = true,
-                    KeyCode::Char('j') | KeyCode::Down => self.orders.scroll_down(),
-                    KeyCode::Char('k') | KeyCode::Up => self.orders.scroll_up(),
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        if self.selected_tab == 2 {
+                            self.messages.scroll_down();
+                        } else {
+                            self.orders.scroll_down();
+                        }
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        if self.selected_tab == 2 {
+                            self.messages.scroll_up();
+                        } else {
+                            self.orders.scroll_up();
+                        }
+                    }
                     KeyCode::Left => {
                         if self.selected_tab > 0 {
                             self.selected_tab -= 1;
@@ -485,14 +494,21 @@ impl Widget for &MostroListWidget {
             .title(loading_state)
             .bg(color)
             .title_bottom("j/k to scroll, ENTER to select order, q to quit");
-
         // A table with the list of orders
         let rows = state.messages.iter().map(|dm| {
-            Row::new(vec![
-                dm.sender.to_string(),
-                dm.content.clone(),
-                dm.created_at.to_string(),
-            ])
+            let sender = if dm.sender == PublicKey::from_str(MOSTRO_PUBKEY).unwrap() {
+                "Mostro".to_string()
+            } else {
+                dm.sender.to_string()
+            };
+            let content = if dm.kind == Kind::GiftWrap {
+                let message = Message::from_json(&dm.content).unwrap();
+                message.get_inner_message_kind().action.to_string()
+            } else {
+                dm.content.clone()
+            };
+            let created_at = Local.timestamp_opt(dm.created_at as i64, 0).unwrap();
+            Row::new(vec![sender, content, created_at.to_string()])
         });
         let widths = [
             Constraint::Fill(1),
