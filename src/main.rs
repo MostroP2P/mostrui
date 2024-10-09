@@ -36,6 +36,9 @@ const MOSTRO_PUBKEY: &str = "npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxt
 // TODO: generate keys for each order (maker or taker)
 // pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
 const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
+// Uncomment this to work with the mostro relay
+// client.add_relay("wss://relay.mostro.network").await?;
+const RELAY: &str = "ws://localhost:7000";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -43,9 +46,7 @@ async fn main() -> Result<()> {
     let app = App::new();
 
     let client = Client::new(&app.my_keys);
-    // Uncomment this to work with the mostro relay
-    // client.add_relay("wss://relay.mostro.network").await?;
-    client.add_relay("ws://localhost:7000").await?;
+    client.add_relay(RELAY).await?;
     client.connect().await;
 
     let since = chrono::Utc::now() - chrono::Duration::days(1);
@@ -352,12 +353,11 @@ impl App {
                                 .unwrap();
                                 let msg = ClientMessage::event(event);
                                 // here we send the message to be broadcasted
-                                let _ = client.send_msg_to(vec!["ws://localhost:7000"], msg).await;
+                                let _ = client.send_msg_to(vec![RELAY], msg).await;
                                 if order.kind == Some(OrderKind::Buy) {
                                     println!("not range buy order");
                                 } else {
                                     println!("not range sell order");
-                                    self.show_invoice_input = true;
                                 }
                                 self.show_order = false;
                             }
@@ -461,7 +461,7 @@ impl MostroListWidget {
                     id: event.id.to_string(),
                     kind: event.kind,
                     sender: unwrapped_gift.sender,
-                    content: unwrapped_gift.rumor.content,
+                    content: unwrapped_gift.rumor.content.clone(),
                     created_at: unwrapped_gift.rumor.created_at.as_u64(),
                 };
                 let mut state = self.state.write().unwrap();
@@ -472,6 +472,24 @@ impl MostroListWidget {
 
                 if !state.messages.is_empty() {
                     state.table_state.select(Some(0));
+                }
+                // Handle possible messages from mostro
+                let message = Message::from_json(&unwrapped_gift.rumor.content).unwrap();
+                match message.get_inner_message_kind().action {
+                    Action::AddInvoice => {
+                        // TODO: find a way of get a mutable reference to app
+                        // app.show_invoice_input = true;
+                    }
+                    Action::NewOrder => {
+                        todo!("New order created message");
+                    }
+                    Action::CantDo => {
+                        println!("CantDo message");
+                    }
+                    Action::Rate => {
+                        println!("Rate message");
+                    }
+                    _ => {}
                 }
             }
             Kind::PrivateDirectMessage => !todo!("Handle PrivateDirectMessage"),
