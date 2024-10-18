@@ -29,6 +29,8 @@ use std::{
 };
 use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+mod widgets;
+use widgets::settings_widget::SettingsWidget;
 
 // Uncomment this to work with the mostro mainnet daemon
 // const MOSTRO_PUBKEY: &str = "npub1ykvsmrmw2hk7jgxgy64zr8tfkx4nnjhq9eyfxdlg3caha3ph0skq6jr3z0";
@@ -160,7 +162,7 @@ impl App {
             0 => self.render_orders_tab(frame, body_area),
             1 => self.render_text_tab(frame, body_area, "My Trades"),
             2 => self.render_messages_tab(frame, body_area),
-            3 => self.render_text_tab(frame, body_area, "Settings"),
+            3 => self.render_settings_tab(frame, body_area),
             _ => {}
         }
 
@@ -278,6 +280,14 @@ impl App {
     fn render_text_tab(&self, frame: &mut Frame, area: Rect, text: &str) {
         let text_line = Line::from(text).centered();
         frame.render_widget(text_line, area);
+    }
+
+    fn render_settings_tab(&self, frame: &mut Frame, area: Rect) {
+        let settings_widget = SettingsWidget {
+            pubkey: self.mostro_pubkey,
+            secret: self.my_keys.secret_key().clone(),
+        };
+        frame.render_widget(settings_widget, area);
     }
 
     async fn handle_event(&mut self, event: &Event, client: Client) {
