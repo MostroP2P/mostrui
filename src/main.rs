@@ -32,14 +32,17 @@ use tui_input::Input;
 mod widgets;
 use widgets::settings_widget::SettingsWidget;
 
-// Uncomment this to work with the mostro mainnet daemon
-// const MOSTRO_PUBKEY: &str = "npub1ykvsmrmw2hk7jgxgy64zr8tfkx4nnjhq9eyfxdlg3caha3ph0skq6jr3z0";
-const MOSTRO_PUBKEY: &str = "npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape";
+// Uncomment this to work with the mostro daemon of your preference
+const MOSTRO_PUBKEY: &str = "dbe0b1be7aafd3cfba92d7463edbd4e33b2969f61bd554d37ac56f032e13355a";
+// mostro web production
+// const MOSTRO_PUBKEY: &str = "npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape";
+// mostro staging
+// const MOSTRO_PUBKEY: &str = "npub1stagewtcks78nvs4vkzm4skqzytk5gwj46kkm8mu2awqqklgswgqfvtamr";
 // TODO: generate keys for each order (maker or taker)
 // pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
 const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
 // Uncomment this to work with the mostro relay
-// client.add_relay("wss://relay.mostro.network").await?;
+// const RELAY: &str = "wss://relay.mostro.network";
 const RELAY: &str = "ws://localhost:7000";
 
 #[tokio::main]
@@ -283,10 +286,8 @@ impl App {
     }
 
     fn render_settings_tab(&self, frame: &mut Frame, area: Rect) {
-        let settings_widget = SettingsWidget {
-            pubkey: self.mostro_pubkey,
-            secret: self.my_keys.secret_key().clone(),
-        };
+        let settings_widget =
+            SettingsWidget::new(self.mostro_pubkey, self.my_keys.secret_key().clone());
         frame.render_widget(settings_widget, area);
     }
 
@@ -557,7 +558,7 @@ impl Widget for &MostroListWidget {
             .block(block)
             .highlight_spacing(HighlightSpacing::Always)
             .highlight_symbol(">>")
-            .highlight_style(selected_style);
+            .row_highlight_style(selected_style);
 
         StatefulWidget::render(table, area, buf, &mut state.table_state);
     }
@@ -701,7 +702,7 @@ impl Widget for &OrderListWidget {
             .block(block)
             .highlight_spacing(HighlightSpacing::Always)
             .highlight_symbol(">>")
-            .highlight_style(selected_style);
+            .row_highlight_style(selected_style);
 
         StatefulWidget::render(table, area, buf, &mut state.table_state);
     }
