@@ -1,18 +1,12 @@
+use crate::settings::get_settings_path;
 use sqlx::pool::Pool;
 use sqlx::Sqlite;
 use sqlx::SqlitePool;
-use std::env;
-use std::fs;
 use std::fs::File;
 use std::path::Path;
 
 pub async fn connect() -> Result<Pool<Sqlite>, sqlx::Error> {
-    let home_dir = env::var("HOME").expect("Couldn't get HOME directory");
-    let mostrui_dir = format!("{}/.mostrui", home_dir);
-    if !Path::new(&mostrui_dir).exists() {
-        fs::create_dir(&mostrui_dir).expect("Couldn't create mostrui directory");
-        println!("Directorio {} creado.", mostrui_dir);
-    }
+    let mostrui_dir = get_settings_path();
     let mostrui_db_path = format!("{}/mostrui.db", mostrui_dir);
 
     let db_url = format!("sqlite://{}", mostrui_db_path);

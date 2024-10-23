@@ -10,10 +10,12 @@ repository = "https://github.com/MostroP2P/mostrui"
 
 [dependencies]
 chrono = { version = "0.4.38", features = ["clock"] }
+config = "0.14.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 mostro-core = "0.6.8"
 nostr-sdk = "0.35.0"
 ratatui = "0.29.0"
+serde = "1.0.213"
 sqlx = { version = "0.8.2", features = ["sqlite", "runtime-tokio-native-tls"] }
 tokio = { version = "1.40.0", features = ["full"] }
 tui-input = "0.10.1"

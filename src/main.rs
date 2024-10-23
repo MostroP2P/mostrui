@@ -1,10 +1,16 @@
+pub mod db;
+pub mod nip59;
+pub mod settings;
+pub mod util;
+
+use crate::db::connect;
+use crate::nip59::{gift_wrap, unwrap_gift_wrap};
+use crate::settings::{get_settings_path, init_global_settings, Settings};
+use crate::util::order_from_tags;
 use chrono::{DateTime, Local, TimeZone};
 use mostro_core::message::{Action, Message};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
-use mostrui::db::connect;
-use mostrui::nip59::{gift_wrap, unwrap_gift_wrap};
-use mostrui::util::order_from_tags;
 use nostr_sdk::prelude::*;
 use nostr_sdk::Kind::ParameterizedReplaceable;
 use ratatui::layout::Flex;
@@ -23,7 +29,9 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use std::cmp::Ordering;
+use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::OnceLock;
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -33,24 +41,28 @@ use tui_input::Input;
 mod widgets;
 use widgets::settings_widget::SettingsWidget;
 
-// Uncomment this to work with the mostro daemon of your preference
-const MOSTRO_PUBKEY: &str = "dbe0b1be7aafd3cfba92d7463edbd4e33b2969f61bd554d37ac56f032e13355a";
-// mostro web production
-// const MOSTRO_PUBKEY: &str = "npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape";
-// mostro staging
-// const MOSTRO_PUBKEY: &str = "npub1stagewtcks78nvs4vkzm4skqzytk5gwj46kkm8mu2awqqklgswgqfvtamr";
+static SETTINGS: OnceLock<Settings> = OnceLock::new();
+
 // TODO: generate keys for each order (maker or taker)
 // pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
 const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
 // Uncomment this to work with the mostro relay
 // const RELAY: &str = "wss://relay.mostro.network";
+// TODO: move this to settings file
 const RELAY: &str = "ws://localhost:7000";
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let settings_path = get_settings_path();
+    let settings_file_path = PathBuf::from(settings_path);
+
+    // Create config global var
+    init_global_settings(Settings::new(settings_file_path)?);
+    let author = PublicKey::from_str(Settings::get().mostro_pubkey.as_str())?;
     let terminal = ratatui::init();
-    let app = App::new();
+    let app = App::new(author);
     let _db = connect().await?;
+
     let client = Client::new(&app.my_keys);
     client.add_relay(RELAY).await?;
     client.connect().await;
@@ -61,7 +73,7 @@ async fn main() -> Result<()> {
     // Here subscribe to get orders
     let orders_sub_id = SubscriptionId::new("orders-sub-id");
     let filter = Filter::new()
-        .author(app.mostro_pubkey)
+        .author(author)
         .kind(ParameterizedReplaceable(NOSTR_REPLACEABLE_EVENT_KIND))
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Y), vec!["mostro"])
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Z), vec!["order"])
@@ -102,9 +114,8 @@ struct App {
 impl App {
     const FRAMES_PER_SECOND: f32 = 60.0;
 
-    pub fn new() -> Self {
+    pub fn new(mostro_pubkey: PublicKey) -> Self {
         let amount_input = Input::default();
-        let mostro_pubkey = PublicKey::from_str(MOSTRO_PUBKEY).unwrap();
 
         Self {
             my_keys: Keys::parse(MY_PRIVATE_KEY).unwrap(),
@@ -524,7 +535,9 @@ impl Widget for &MostroListWidget {
             .title_bottom("j/k to scroll, ENTER to select order, q to quit");
         // A table with the list of orders
         let rows = state.messages.iter().map(|dm| {
-            let sender = if dm.sender == PublicKey::from_str(MOSTRO_PUBKEY).unwrap() {
+            let sender = if dm.sender
+                == PublicKey::from_str(Settings::get().mostro_pubkey.as_str()).unwrap()
+            {
                 "Mostro".to_string()
             } else {
                 dm.sender.to_string()
