@@ -14,12 +14,7 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 mostro-core = "0.6.8"
 nostr-sdk = "0.35.0"
 ratatui = "0.29.0"
-sea-orm = { version = "1.1.0", features = [
-  "sqlx-sqlite",
-  "runtime-tokio-native-tls",
-  "with-uuid",
-] }
-# sqlx = "0.8.2"
+sqlx = { version = "0.8.2", features = ["sqlite", "runtime-tokio-native-tls"] }
 tokio = { version = "1.40.0", features = ["full"] }
 tui-input = "0.10.1"
 uuid = "1.10.0"

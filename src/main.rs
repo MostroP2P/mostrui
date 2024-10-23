@@ -2,6 +2,7 @@ use chrono::{DateTime, Local, TimeZone};
 use mostro_core::message::{Action, Message};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
+use mostrui::db::connect;
 use mostrui::nip59::{gift_wrap, unwrap_gift_wrap};
 use mostrui::util::order_from_tags;
 use nostr_sdk::prelude::*;
@@ -49,7 +50,7 @@ const RELAY: &str = "ws://localhost:7000";
 async fn main() -> Result<()> {
     let terminal = ratatui::init();
     let app = App::new();
-
+    let _db = connect().await?;
     let client = Client::new(&app.my_keys);
     client.add_relay(RELAY).await?;
     client.connect().await;
@@ -96,7 +97,6 @@ struct App {
     show_amount_input: bool,
     show_invoice_input: bool,
     amount_input: Input,
-    // new_order: Option<Order>,
 }
 
 impl App {
@@ -117,7 +117,6 @@ impl App {
             show_amount_input: false,
             show_invoice_input: false,
             amount_input,
-            // new_order: None,
         }
     }
 
