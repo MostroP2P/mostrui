@@ -41,11 +41,23 @@ use tui_input::Input;
 mod widgets;
 use widgets::settings_widget::SettingsWidget;
 
+<<<<<<< Updated upstream
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
 
 // TODO: generate keys for each order (maker or taker)
 // pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
 const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
+=======
+// Uncomment this to work with the mostro mainnet daemon
+const MOSTRO_PUBKEY: &str = "npub1stagewtcks78nvs4vkzm4skqzytk5gwj46kkm8mu2awqqklgswgqfvtamr";
+//const MOSTRO_PUBKEY: &str = "npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape";
+// TODO: generate keys for each order (maker or taker)
+// pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
+const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
+// Uncomment this to work with the mostro relay
+// client.add_relay("wss://relay.mostro.network").await?;
+const RELAY: &str = "wss://relay.mostro.network";
+>>>>>>> Stashed changes
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -156,7 +168,7 @@ impl App {
         let [tabs_area, body_area] = vertical.areas(frame.area());
 
         // Defining tabs labels
-        let tab_titles = ["Orders", "My Trades", "Messages", "Settings"]
+        let tab_titles = ["Create order","Orders Book", "My Trades", "Messages", "Settings"]
             .iter()
             .map(|t| Line::from(*t).bold())
             .collect::<Vec<Line>>();
@@ -168,13 +180,15 @@ impl App {
             .select(self.selected_tab)
             .highlight_style(Style::new().fg(BLUE.c400));
 
+        
         frame.render_widget(tabs, tabs_area);
 
         match self.selected_tab {
-            0 => self.render_orders_tab(frame, body_area),
-            1 => self.render_text_tab(frame, body_area, "My Trades"),
-            2 => self.render_messages_tab(frame, body_area),
-            3 => self.render_settings_tab(frame, body_area),
+            0 => self.render_new_order_tab(frame, body_area),
+            1 => self.render_orders_tab(frame, body_area),
+            2 => self.render_text_tab(frame, body_area, "My Trades"),
+            4 => self.render_messages_tab(frame, body_area),
+            4 => self.render_settings_tab(frame, body_area),
             _ => {}
         }
 
@@ -281,6 +295,10 @@ impl App {
         }
     }
 
+    fn render_new_order_tab(&self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(&self.orders, area);
+    }
+
     fn render_orders_tab(&self, frame: &mut Frame, area: Rect) {
         frame.render_widget(&self.orders, area);
     }
@@ -330,6 +348,7 @@ impl App {
                         }
                     }
                     KeyCode::Enter => {
+<<<<<<< Updated upstream
                         let order = {
                             let state = self.orders.state.read().unwrap();
                             let selected = state.table_state.selected();
@@ -376,16 +395,71 @@ impl App {
                                     let _ = client.send_msg_to(Settings::get().relays, msg).await;
                                     if order.kind == Some(OrderKind::Buy) {
                                         println!("not range buy order");
+=======
+                        match self.selected_tab{
+                            0 => {
+
+                            }
+                            1 => {
+                                let order = {
+                                    let state = self.orders.state.read().unwrap();
+                                    let selected = state.table_state.selected();
+                                    selected.and_then(|i| state.orders.get(i).cloned())
+                                };
+        
+                                if let Some(order) = order {
+                                    if self.show_amount_input {
+                                        let value = self.amount_input.value().parse::<i64>().unwrap_or(0);
+        
+                                        if value >= order.min_amount.unwrap_or(10)
+                                            && value <= order.max_amount.unwrap_or(500)
+                                        {
+                                            self.show_amount_input = false;
+                                            self.show_order = false;
+                                            self.generate_new_keys(); // Generate new keys for taking a range order
+                                            println!("range order");
+                                        } else {
+                                            println!("out of range error");
+                                        }
+                                    } else if self.show_order {
+                                        if order.max_amount.is_some() {
+                                            self.show_amount_input = true;
+                                            self.show_order = false;
+                                        } else {
+                                            self.generate_new_keys(); // Generate new keys for taking a non-range order
+                                            let take_sell_message = Message::new_order(
+                                                Some(order.id.unwrap()),
+                                                Action::TakeSell,
+                                                None,
+                                            )
+                                            .as_json()
+                                            .unwrap();
+                                            println!("take sell message: {:?}", take_sell_message);
+                                            let event = gift_wrap(
+                                                &self.my_keys,
+                                                self.mostro_pubkey,
+                                                take_sell_message,
+                                                None,
+                                                0,
+                                            )
+                                            .unwrap();
+                                            let msg = ClientMessage::event(event);
+                                            let _ = client.send_msg_to(vec![RELAY], msg).await;
+                                            if order.kind == Some(OrderKind::Buy) {
+                                                println!("not range buy order");
+                                            } else {
+                                                println!("not range sell order");
+                                            }
+                                            self.show_order = false;
+                                        }
+>>>>>>> Stashed changes
                                     } else {
-                                        println!("not range sell order");
+                                        self.show_order = true;
                                     }
-                                    self.show_order = false;
                                 }
-                            } else {
-                                self.show_order = true;
+                            }
                             }
                         }
-                    }
                     KeyCode::Esc => self.show_order = false,
                     _ => {
                         if self.show_amount_input {
