@@ -46,10 +46,6 @@ static SETTINGS: OnceLock<Settings> = OnceLock::new();
 // TODO: generate keys for each order (maker or taker)
 // pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
 const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
-// Uncomment this to work with the mostro relay
-// const RELAY: &str = "wss://relay.mostro.network";
-// TODO: move this to settings file
-const RELAY: &str = "ws://localhost:7000";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -58,13 +54,16 @@ async fn main() -> Result<()> {
 
     // Create config global var
     init_global_settings(Settings::new(settings_file_path)?);
-    let author = PublicKey::from_str(Settings::get().mostro_pubkey.as_str())?;
     let terminal = ratatui::init();
+    let author = PublicKey::from_str(Settings::get().mostro_pubkey.as_str())?;
     let app = App::new(author);
     let _db = connect().await?;
 
     let client = Client::new(&app.my_keys);
-    client.add_relay(RELAY).await?;
+    let relays = Settings::get().relays.clone();
+    for relay in relays {
+        client.add_relay(relay).await?;
+    }
     client.connect().await;
 
     let since = chrono::Utc::now() - chrono::Duration::days(1);
@@ -374,7 +373,7 @@ impl App {
                                     )
                                     .unwrap();
                                     let msg = ClientMessage::event(event);
-                                    let _ = client.send_msg_to(vec![RELAY], msg).await;
+                                    let _ = client.send_msg_to(Settings::get().relays, msg).await;
                                     if order.kind == Some(OrderKind::Buy) {
                                         println!("not range buy order");
                                     } else {

@@ -15,6 +15,7 @@ use std::{
 #[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
     pub mostro_pubkey: String,
+    pub relays: Vec<String>,
 }
 
 #[cfg(windows)]
