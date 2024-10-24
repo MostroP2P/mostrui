@@ -1,0 +1,3 @@
+# Mostro pubkey, it can be hex or npub
+mostro_pubkey = "0000000000000000000000000000000000000000000000000000000000000000"
+relays = ["wss://relay.mostro.network", "wss://nostr.bilthon.dev"]

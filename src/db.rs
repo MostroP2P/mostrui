@@ -1,26 +1,25 @@
+use crate::settings::get_settings_path;
 use sqlx::pool::Pool;
 use sqlx::Sqlite;
 use sqlx::SqlitePool;
-use std::env;
-use std::fs;
 use std::fs::File;
 use std::path::Path;
 
 pub async fn connect() -> Result<Pool<Sqlite>, sqlx::Error> {
-    let home_dir = env::var("HOME").expect("Couldn't get HOME directory");
-    let mostrui_dir = format!("{}/.mostrui", home_dir);
-    if !Path::new(&mostrui_dir).exists() {
-        fs::create_dir(&mostrui_dir).expect("Couldn't create mostrui directory");
-        println!("Directorio {} creado.", mostrui_dir);
-    }
+    let mostrui_dir = get_settings_path();
     let mostrui_db_path = format!("{}/mostrui.db", mostrui_dir);
+
+    if !Path::exists(Path::new(&mostrui_db_path)) {
+        if let Err(res) = File::create(&mostrui_db_path) {
+            println!("Error in creating db file: {}", res)
+        }
+    }
 
     let db_url = format!("sqlite://{}", mostrui_db_path);
     let pool = SqlitePool::connect(&db_url).await?;
 
     // We create the database file with orders table if the file doesn't exists
     if !Path::new(&mostrui_db_path).exists() {
-        File::create(&mostrui_db_path)?;
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS orders (
