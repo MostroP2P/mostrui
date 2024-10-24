@@ -1,8 +1,12 @@
 # Mostrui 🧌
 
+![Mostro-logo](static/logo.png)
+
 **This is work in progres**
 
 Terminal client for p2p using Mostro protocol.
+
+![tui](static/mostrui.png)
 
 ## Requirements:
 
