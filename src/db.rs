@@ -9,12 +9,17 @@ pub async fn connect() -> Result<Pool<Sqlite>, sqlx::Error> {
     let mostrui_dir = get_settings_path();
     let mostrui_db_path = format!("{}/mostrui.db", mostrui_dir);
 
+    if !Path::exists(Path::new(&mostrui_db_path)) {
+        if let Err(res) = File::create(&mostrui_db_path) {
+            println!("Error in creating db file: {}", res)
+        }
+    }
+
     let db_url = format!("sqlite://{}", mostrui_db_path);
     let pool = SqlitePool::connect(&db_url).await?;
 
     // We create the database file with orders table if the file doesn't exists
     if !Path::new(&mostrui_db_path).exists() {
-        File::create(&mostrui_db_path)?;
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS orders (
