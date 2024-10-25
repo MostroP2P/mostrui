@@ -28,6 +28,7 @@ use ratatui::{
     },
     DefaultTerminal, Frame,
 };
+use widgets::new_order_widget::NewOrderWidget;
 use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -41,13 +42,8 @@ use tui_input::Input;
 mod widgets;
 use widgets::settings_widget::SettingsWidget;
 
-<<<<<<< Updated upstream
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
 
-// TODO: generate keys for each order (maker or taker)
-// pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
-const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
-=======
 // Uncomment this to work with the mostro mainnet daemon
 const MOSTRO_PUBKEY: &str = "npub1stagewtcks78nvs4vkzm4skqzytk5gwj46kkm8mu2awqqklgswgqfvtamr";
 //const MOSTRO_PUBKEY: &str = "npub1m0str0n64lfulw5j6arrak75uvajj60kr024f5m6c4hsxtsnx4dqpd9ape";
@@ -57,7 +53,6 @@ const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c38
 // Uncomment this to work with the mostro relay
 // client.add_relay("wss://relay.mostro.network").await?;
 const RELAY: &str = "wss://relay.mostro.network";
->>>>>>> Stashed changes
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -119,6 +114,7 @@ struct App {
     messages: MostroListWidget,
     show_amount_input: bool,
     show_invoice_input: bool,
+    show_new_order : bool,
     amount_input: Input,
 }
 
@@ -138,6 +134,7 @@ impl App {
             messages: MostroListWidget::default(),
             show_amount_input: false,
             show_invoice_input: false,
+            show_new_order : false,
             amount_input,
         }
     }
@@ -188,7 +185,7 @@ impl App {
             1 => self.render_orders_tab(frame, body_area),
             2 => self.render_text_tab(frame, body_area, "My Trades"),
             4 => self.render_messages_tab(frame, body_area),
-            4 => self.render_settings_tab(frame, body_area),
+            5 => self.render_settings_tab(frame, body_area),
             _ => {}
         }
 
@@ -244,6 +241,12 @@ impl App {
                 input_paragraph,
                 Rect::new(popup_area.x, popup_area.y + 4, popup_area.width, 3),
             );
+        }
+
+        if self.show_new_order{
+            
+            let widget_new_order = NewOrderWidget::new(Default::default());
+            frame.render_widget(widget_new_order, body_area);
         }
 
         if self.show_order {
@@ -348,57 +351,9 @@ impl App {
                         }
                     }
                     KeyCode::Enter => {
-<<<<<<< Updated upstream
-                        let order = {
-                            let state = self.orders.state.read().unwrap();
-                            let selected = state.table_state.selected();
-                            selected.and_then(|i| state.orders.get(i).cloned())
-                        };
-
-                        if let Some(order) = order {
-                            if self.show_amount_input {
-                                let value = self.amount_input.value().parse::<i64>().unwrap_or(0);
-
-                                if value >= order.min_amount.unwrap_or(10)
-                                    && value <= order.max_amount.unwrap_or(500)
-                                {
-                                    self.show_amount_input = false;
-                                    self.show_order = false;
-                                    self.generate_new_keys(); // Generate new keys for taking a range order
-                                    println!("range order");
-                                } else {
-                                    println!("out of range error");
-                                }
-                            } else if self.show_order {
-                                if order.max_amount.is_some() {
-                                    self.show_amount_input = true;
-                                    self.show_order = false;
-                                } else {
-                                    self.generate_new_keys(); // Generate new keys for taking a non-range order
-                                    let take_sell_message = Message::new_order(
-                                        Some(order.id.unwrap()),
-                                        Action::TakeSell,
-                                        None,
-                                    )
-                                    .as_json()
-                                    .unwrap();
-                                    println!("take sell message: {:?}", take_sell_message);
-                                    let event = gift_wrap(
-                                        &self.my_keys,
-                                        self.mostro_pubkey,
-                                        take_sell_message,
-                                        None,
-                                        0,
-                                    )
-                                    .unwrap();
-                                    let msg = ClientMessage::event(event);
-                                    let _ = client.send_msg_to(Settings::get().relays, msg).await;
-                                    if order.kind == Some(OrderKind::Buy) {
-                                        println!("not range buy order");
-=======
                         match self.selected_tab{
                             0 => {
-
+                                self.show_new_order = true;
                             }
                             1 => {
                                 let order = {
@@ -452,13 +407,15 @@ impl App {
                                             }
                                             self.show_order = false;
                                         }
->>>>>>> Stashed changes
                                     } else {
                                         self.show_order = true;
                                     }
                                 }
                             }
+                            // Skip
+                            _ => ()
                             }
+                            
                         }
                     KeyCode::Esc => self.show_order = false,
                     _ => {
