@@ -357,6 +357,7 @@ impl App {
                                 } else {
                                     self.generate_new_keys(); // Generate new keys for taking a non-range order
                                     let take_sell_message = Message::new_order(
+                                        None,
                                         Some(order.id.unwrap()),
                                         Action::TakeSell,
                                         None,
@@ -512,7 +513,7 @@ impl MostroListWidget {
                     _ => {}
                 }
             }
-            Kind::PrivateDirectMessage => !todo!("Handle PrivateDirectMessage"),
+            Kind::PrivateDirectMessage => todo!("Handle PrivateDirectMessage"),
             _ => {}
         }
 
