@@ -130,9 +130,9 @@ impl App {
         }
     }
 
-    pub fn generate_new_keys(&mut self) {
-        self.my_keys = Keys::generate();
-    }
+    //pub fn generate_new_keys(&mut self) {
+    //   self.my_keys = Keys::generate();
+    //}
 
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
         self.orders.run(client.clone());
@@ -351,7 +351,7 @@ impl App {
                                             {
                                                 self.show_amount_input = false;
                                                 self.show_order = false;
-                                                self.generate_new_keys(); // Generate new keys for taking a non-range order
+                                                // When nip 06 is implemented, check if there is a key saved in the database, and if there is not, create a new one
                                                 let take_sell_message = Message::new_order(
                                                     None,
                                                     Some(order.id.unwrap()),
@@ -400,7 +400,7 @@ impl App {
                                         self.show_amount_input = true;
                                         self.show_order = false;
                                     } else {
-                                        self.generate_new_keys(); // Generate new keys for taking a non-range order
+                                        // When nip 06 is implemented, check if there is a key saved in the database, and if there is not, create a new one
                                         let take_sell_message = Message::new_order(
                                             None,
                                             Some(order.id.unwrap()),
