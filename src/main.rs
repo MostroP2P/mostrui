@@ -327,6 +327,8 @@ impl App {
                     KeyCode::Right => {
                         if self.selected_tab < 3 {
                             self.selected_tab += 1;
+                            self.show_order = false;
+                            self.show_amount_input = false;
                         }
                     }
                     KeyCode::Enter => {
