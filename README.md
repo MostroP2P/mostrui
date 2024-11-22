@@ -42,3 +42,21 @@ relays = ["wss://relay.mostro.network", "wss://nostr.bilthon.dev"]
 ```bash
 $ cargo run
 ```
+
+## Progress Overview
+- [x] Displays order list
+- [x] Settings tab
+- [ ] Take orders (Buy & Sell)
+- [ ] Posts Orders (Buy & Sell)
+- [ ] Direct message with peers (use nip-17)
+- [ ] Fiat sent
+- [ ] Release
+- [ ] Maker cancel pending order
+- [ ] Cooperative cancellation
+- [ ] Buyer: add new invoice if payment fails
+- [ ] Rate users
+- [ ] List own orders
+- [ ] Dispute flow (users)
+- [ ] Dispute management (for admins)
+- [ ] Create buy orders with LN address
+- [ ] Nip-06 support (identity management)
