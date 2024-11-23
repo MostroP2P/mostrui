@@ -58,5 +58,6 @@ $ cargo run
 - [ ] List own orders
 - [ ] Dispute flow (users)
 - [ ] Dispute management (for admins)
+- [ ] Conversation key management
 - [ ] Create buy orders with LN address
 - [ ] Nip-06 support (identity management)
