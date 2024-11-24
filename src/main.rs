@@ -13,7 +13,7 @@ use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
 use nostr_sdk::Kind::ParameterizedReplaceable;
-use ratatui::layout::Flex;
+use ratatui::layout::{Direction, Flex};
 use ratatui::style::Color;
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{
@@ -28,7 +28,8 @@ use ratatui::{
     },
     DefaultTerminal, Frame,
 };
-use widgets::new_order_widget::NewOrderWidget;
+use tui_prompts::{Prompt, TextPrompt, TextRenderStyle};
+use widgets::new_order_widget::{draw_new_order_widget, NewOrderWidget};
 use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -104,6 +105,12 @@ async fn main() -> Result<()> {
 }
 
 #[derive(Debug)]
+enum InputMode {
+    Tabs,
+    PopupNewOrder,
+}
+
+#[derive(Debug)]
 struct App {
     my_keys: Keys,
     mostro_pubkey: PublicKey,
@@ -116,7 +123,9 @@ struct App {
     show_invoice_input: bool,
     show_new_order : bool,
     amount_input: Input,
+    input_mode : InputMode,
 }
+
 
 impl App {
     const FRAMES_PER_SECOND: f32 = 60.0;
@@ -136,6 +145,7 @@ impl App {
             show_invoice_input: false,
             show_new_order : false,
             amount_input,
+            input_mode : InputMode::Tabs,
         }
     }
 
@@ -244,9 +254,7 @@ impl App {
         }
 
         if self.show_new_order{
-            
-            let widget_new_order = NewOrderWidget::new(Default::default());
-            frame.render_widget(widget_new_order, body_area);
+            draw_new_order_widget(frame, body_area);
         }
 
         if self.show_order {
@@ -417,7 +425,7 @@ impl App {
                             }
                             
                         }
-                    KeyCode::Esc => self.show_order = false,
+                    KeyCode::Esc => {self.show_order = false; self.show_new_order = false}
                     _ => {
                         if self.show_amount_input {
                             self.amount_input.handle_event(&Event::Key(*key)); // Handle keyboard events in textarea
