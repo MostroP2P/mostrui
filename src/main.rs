@@ -8,7 +8,7 @@ use crate::nip59::{gift_wrap, unwrap_gift_wrap};
 use crate::settings::{get_settings_path, init_global_settings, Settings};
 use crate::util::order_from_tags;
 use chrono::{DateTime, Local, TimeZone};
-use mostro_core::message::{Action, Message};
+use mostro_core::message::{Action, Content, Message};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
@@ -130,9 +130,9 @@ impl App {
         }
     }
 
-    pub fn generate_new_keys(&mut self) {
-        self.my_keys = Keys::generate();
-    }
+    //pub fn generate_new_keys(&mut self) {
+    //   self.my_keys = Keys::generate();
+    //}
 
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
         self.orders.run(client.clone());
@@ -253,6 +253,11 @@ impl App {
                 Some(OrderKind::Sell) => "Buy",
                 _ => "Trade",
             };
+            let order_type = match order.kind {
+                Some(OrderKind::Buy) => "Buying",
+                Some(OrderKind::Sell) => "Selling",
+                _ => "Trading",
+            };
             let color: Color = Color::from_str("#14161C").unwrap();
             let block = Block::bordered()
                 .title("Order details".to_string())
@@ -270,8 +275,8 @@ impl App {
                 Local.timestamp_opt(order.created_at.unwrap(), 0).unwrap();
             let lines = vec![
                 Line::raw(format!(
-                    "Someone is buying sats for {} {} at {} with {}.",
-                    fiat_amount, order.fiat_code, sats_amount, premium
+                    "Someone is {} sats for {} {} at {} with {}.",
+                    order_type, fiat_amount, order.fiat_code, sats_amount, premium
                 )),
                 Line::raw(""),
                 Line::raw(format!("The payment method is {}.", order.payment_method)),
