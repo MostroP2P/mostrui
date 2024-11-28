@@ -8,7 +8,7 @@ use crate::nip59::{gift_wrap, unwrap_gift_wrap};
 use crate::settings::{get_settings_path, init_global_settings, Settings};
 use crate::util::order_from_tags;
 use chrono::{DateTime, Local, TimeZone};
-use mostro_core::message::{Action, Content, Message};
+use mostro_core::message::{Action, Message};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
@@ -130,9 +130,10 @@ impl App {
         }
     }
 
-    //pub fn generate_new_keys(&mut self) {
-    //   self.my_keys = Keys::generate();
-    //}
+    // TODO: Implement https://mostro.network/protocol/key_management.html
+    pub fn generate_new_keys(&mut self) {
+      self.my_keys = Keys::generate();
+    }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
         self.orders.run(client.clone());
