@@ -201,8 +201,13 @@ impl App {
         }
 
         if self.show_amount_input {
-            let popup_area = popup_area(frame.area(), 50, 20);
-            let block = Block::bordered().title("Amount input").bg(Color::Black);
+            let popup_area = popup_area(frame.area(), 55, 25);
+            let color: Color = Color::from_str("#14161C").unwrap();
+            let block = Block::bordered()
+                .title("Amount input".to_string())
+                .bg(color)
+                .title_style(Style::new().fg(Color::White))
+                .title_bottom(format!("ESC to close, ENTER to send fiat amount")); 
             let selected = self.orders.state.read().unwrap().table_state.selected();
             let state = self.orders.state.read().unwrap();
             let order = match selected {
@@ -218,7 +223,10 @@ impl App {
                 )),
             ];
 
-            let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+            let paragraph = Paragraph::new(lines)
+                .block(block)
+                .cyan()
+                .wrap(Wrap { trim: true });
             let input_paragraph = Paragraph::new(vec![Line::from(self.amount_input.value())])
                 .block(Block::default().borders(ratatui::widgets::Borders::ALL))
                 .wrap(Wrap { trim: true });
@@ -228,7 +236,7 @@ impl App {
             // Render input
             frame.render_widget(
                 input_paragraph,
-                Rect::new(popup_area.x, popup_area.y + 4, popup_area.width, 3),
+                Rect::new(popup_area.x, popup_area.y + 6, popup_area.width, 3),
             );
         }
 
@@ -249,6 +257,7 @@ impl App {
             let block = Block::bordered()
                 .title("Order details".to_string())
                 .bg(color)
+                .title_style(Style::new().fg(Color::White))
                 .title_bottom(format!("ESC to close, ENTER to {}", action));
             let sats_amount = order.sats_amount();
             let premium = match order.premium.cmp(&0) {
@@ -327,67 +336,74 @@ impl App {
                     KeyCode::Right => {
                         if self.selected_tab < 3 {
                             self.selected_tab += 1;
+                            self.show_order = false;
+                            self.show_amount_input = false;
                         }
                     }
                     KeyCode::Enter => {
-                        let order = {
-                            let state = self.orders.state.read().unwrap();
-                            let selected = state.table_state.selected();
-                            selected.and_then(|i| state.orders.get(i).cloned())
-                        };
+                        if self.selected_tab == 0 || self.show_order || self.show_amount_input || self.show_invoice_input {
+                            let order = {
+                                let state = self.orders.state.read().unwrap();
+                                let selected = state.table_state.selected();
+                                selected.and_then(|i| state.orders.get(i).cloned())
+                            };
 
-                        if let Some(order) = order {
-                            if self.show_amount_input {
-                                let value = self.amount_input.value().parse::<i64>().unwrap_or(0);
+                            if let Some(order) = order {
+                                if self.show_amount_input {
+                                    let value = self.amount_input.value().parse::<i64>().unwrap_or(0);
 
-                                if value >= order.min_amount.unwrap_or(10)
-                                    && value <= order.max_amount.unwrap_or(500)
-                                {
-                                    self.show_amount_input = false;
-                                    self.show_order = false;
-                                    self.generate_new_keys(); // Generate new keys for taking a range order
-                                    println!("range order");
-                                } else {
-                                    println!("out of range error");
-                                }
-                            } else if self.show_order {
-                                if order.max_amount.is_some() {
-                                    self.show_amount_input = true;
-                                    self.show_order = false;
-                                } else {
-                                    self.generate_new_keys(); // Generate new keys for taking a non-range order
-                                    let take_sell_message = Message::new_order(
-                                        None,
-                                        Some(order.id.unwrap()),
-                                        Action::TakeSell,
-                                        None,
-                                    )
-                                    .as_json()
-                                    .unwrap();
-                                    println!("take sell message: {:?}", take_sell_message);
-                                    let event = gift_wrap(
-                                        &self.my_keys,
-                                        self.mostro_pubkey,
-                                        take_sell_message,
-                                        None,
-                                        0,
-                                    )
-                                    .unwrap();
-                                    let msg = ClientMessage::event(event);
-                                    let _ = client.send_msg_to(Settings::get().relays, msg).await;
-                                    if order.kind == Some(OrderKind::Buy) {
-                                        println!("not range buy order");
+                                    if value >= order.min_amount.unwrap_or(10)
+                                        && value <= order.max_amount.unwrap_or(500)
+                                    {
+                                        self.show_amount_input = false;
+                                        self.show_order = false;
+                                        self.generate_new_keys(); // Generate new keys for taking a range order
+                                        println!("range order");
                                     } else {
-                                        println!("not range sell order");
+                                        println!("out of range error");
                                     }
-                                    self.show_order = false;
+                                } else if self.show_order {
+                                    if order.max_amount.is_some() {
+                                        self.show_amount_input = true;
+                                        self.show_order = false;
+                                    } else {
+                                        self.generate_new_keys(); // Generate new keys for taking a non-range order
+                                        let take_sell_message = Message::new_order(
+                                            None,
+                                            Some(order.id.unwrap()),
+                                            Action::TakeSell,
+                                            None,
+                                        )
+                                        .as_json()
+                                        .unwrap();
+                                        println!("take sell message: {:?}", take_sell_message);
+                                        let event = gift_wrap(
+                                            &self.my_keys,
+                                            self.mostro_pubkey,
+                                            take_sell_message,
+                                            None,
+                                            0,
+                                        )
+                                        .unwrap();
+                                        let msg = ClientMessage::event(event);
+                                        let _ = client.send_msg_to(Settings::get().relays, msg).await;
+                                        if order.kind == Some(OrderKind::Buy) {
+                                            println!("not range buy order");
+                                        } else {
+                                            println!("not range sell order");
+                                        }
+                                        self.show_order = false;
+                                    }
+                                } else {
+                                    self.show_order = true;
                                 }
-                            } else {
-                                self.show_order = true;
                             }
                         }
                     }
-                    KeyCode::Esc => self.show_order = false,
+                    KeyCode::Esc => {
+                        self.show_order = false;
+                        self.show_amount_input = false;                   
+                    }
                     _ => {
                         if self.show_amount_input {
                             self.amount_input.handle_event(&Event::Key(*key)); // Handle keyboard events in textarea
