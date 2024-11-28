@@ -8,7 +8,7 @@ use crate::nip59::{gift_wrap, unwrap_gift_wrap};
 use crate::settings::{get_settings_path, init_global_settings, Settings};
 use crate::util::order_from_tags;
 use chrono::{DateTime, Local, TimeZone};
-use mostro_core::message::{Action, Message};
+use mostro_core::message::{Action, Content, Message};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
@@ -131,9 +131,9 @@ impl App {
     }
 
     // TODO: Implement https://mostro.network/protocol/key_management.html
-    pub fn generate_new_keys(&mut self) {
-      self.my_keys = Keys::generate();
-    }
+    //pub fn generate_new_keys(&mut self) {
+    //  self.my_keys = Keys::generate();
+    //}
 
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
         self.orders.run(client.clone());
@@ -237,7 +237,7 @@ impl App {
             // Render input
             frame.render_widget(
                 input_paragraph,
-                Rect::new(popup_area.x, popup_area.y + 6, popup_area.width, 3),
+                Rect::new(popup_area.x, popup_area.y + 5, popup_area.width, 3),
             );
         }
 
@@ -355,53 +355,100 @@ impl App {
                             };
 
                             if let Some(order) = order {
-                                if self.show_amount_input {
-                                    let value = self.amount_input.value().parse::<i64>().unwrap_or(0);
-
-                                    if value >= order.min_amount.unwrap_or(10)
-                                        && value <= order.max_amount.unwrap_or(500)
-                                    {
-                                        self.show_amount_input = false;
-                                        self.show_order = false;
-                                        self.generate_new_keys(); // Generate new keys for taking a range order
-                                        println!("range order");
-                                    } else {
-                                        println!("out of range error");
-                                    }
-                                } else if self.show_order {
-                                    if order.max_amount.is_some() {
-                                        self.show_amount_input = true;
-                                        self.show_order = false;
-                                    } else {
-                                        self.generate_new_keys(); // Generate new keys for taking a non-range order
-                                        let take_sell_message = Message::new_order(
-                                            None,
-                                            Some(order.id.unwrap()),
-                                            Action::TakeSell,
-                                            None,
-                                        )
-                                        .as_json()
-                                        .unwrap();
-                                        println!("take sell message: {:?}", take_sell_message);
-                                        let event = gift_wrap(
-                                            &self.my_keys,
-                                            self.mostro_pubkey,
-                                            take_sell_message,
-                                            None,
-                                            0,
-                                        )
-                                        .unwrap();
-                                        let msg = ClientMessage::event(event);
-                                        let _ = client.send_msg_to(Settings::get().relays, msg).await;
-                                        if order.kind == Some(OrderKind::Buy) {
-                                            println!("not range buy order");
-                                        } else {
-                                            println!("not range sell order");
+                                if order.kind == Some(OrderKind::Sell) {
+                                    if self.show_amount_input {
+                                        match self.amount_input.value().parse::<i64>() {
+                                            Ok(value) => {
+                                                if value >= order.min_amount.unwrap_or(10)
+                                                    && value <= order.max_amount.unwrap_or(500)
+                                                {
+                                                    self.show_amount_input = false;
+                                                    self.show_order = false;
+                                                    // TODO: Implement https://mostro.network/protocol/key_management.html
+                                                    let take_sell_message = Message::new_order(
+                                                        None,
+                                                        Some(order.id.unwrap()),
+                                                        Action::TakeSell,
+                                                        Some(Content::Amount(value)),
+                                                    )
+                                                    .as_json()
+                                                    .unwrap();
+    
+                                                    println!(
+                                                        "Taking the order {} for {} {} with payment method {}",
+                                                        order.id.unwrap(),
+                                                        value,
+                                                        order.fiat_code,
+                                                        order.payment_method
+                                                    );
+    
+                                                    let event = gift_wrap(
+                                                        &self.my_keys,
+                                                        self.mostro_pubkey,
+                                                        take_sell_message,
+                                                        None,
+                                                        0,
+                                                    )
+                                                    .unwrap();
+    
+                                                    let msg = ClientMessage::event(event);
+                                                    let _ = client
+                                                        .send_msg_to(Settings::get().relays, msg)
+                                                        .await;
+                                                } else {
+                                                    self.show_amount_input = false;
+                                                    println!(
+                                                        "Value {} is out of the order range",
+                                                        value
+                                                    );
+                                                }
+                                            }
+                                            Err(_) => {
+                                                self.show_amount_input = false;
+                                                println!("Invalid amount input. Please enter a valid number.");
+                                            }
                                         }
-                                        self.show_order = false;
+                                    } else if self.show_order {
+                                        if order.max_amount.is_some() {
+                                            self.show_amount_input = true;
+                                            self.show_order = false;
+                                        } else {
+                                            // TODO: Implement https://mostro.network/protocol/key_management.html
+                                            let take_sell_message = Message::new_order(
+                                                None,
+                                                Some(order.id.unwrap()),
+                                                Action::TakeSell,
+                                                None,
+                                            )
+                                            .as_json()
+                                            .unwrap();
+                                            println!(
+                                                "Taking the order {} for {} {}, with payment method {}",
+                                                order.id.unwrap(),
+                                                order.fiat_amount,
+                                                order.fiat_code,
+                                                order.payment_method
+                                            );
+                                            let event = gift_wrap(
+                                                &self.my_keys,
+                                                self.mostro_pubkey,
+                                                take_sell_message,
+                                                None,
+                                                0,
+                                            )
+                                            .unwrap();
+    
+                                            let msg = ClientMessage::event(event);
+                                            let _ =
+                                                client.send_msg_to(Settings::get().relays, msg).await;
+                                            self.show_order = false;
+                                        }
+                                    } else {
+                                        self.show_order = true;
                                     }
-                                } else {
-                                    self.show_order = true;
+                                } else if order.kind == Some(OrderKind::Buy) {                                    
+                                    println!("Purchase order cannot be taken for now.")
+                                    // TODO: take purchase orders
                                 }
                             }
                         }
