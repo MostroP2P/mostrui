@@ -447,8 +447,96 @@ impl App {
                                         self.show_order = true;
                                     }
                                 } else if order.kind == Some(OrderKind::Buy) {                                    
-                                    println!("Purchase order cannot be taken for now.")
-                                    // TODO: take purchase orders
+                                    if self.show_amount_input {
+                                        match self.amount_input.value().parse::<i64>() {
+                                            Ok(value) => {
+                                                if value >= order.min_amount.unwrap_or(10)
+                                                    && value <= order.max_amount.unwrap_or(500)
+                                                {
+                                                    self.show_amount_input = false;
+                                                    self.show_order = false;
+                                                    // TODO: Implement https://mostro.network/protocol/key_management.html
+                                                    let take_buy_message = Message::new_order(
+                                                        None,
+                                                        Some(order.id.unwrap()),
+                                                        Action::TakeBuy,
+                                                        Some(Content::Amount(value)),
+                                                    )
+                                                    .as_json()
+                                                    .unwrap();
+    
+                                                    println!(
+                                                        "Taking the order {} for {} {} with payment method {}",
+                                                        order.id.unwrap(),
+                                                        value,
+                                                        order.fiat_code,
+                                                        order.payment_method
+                                                    );
+    
+                                                    let event = gift_wrap(
+                                                        &self.my_keys,
+                                                        self.mostro_pubkey,
+                                                        take_buy_message,
+                                                        None,
+                                                        0,
+                                                    )
+                                                    .unwrap();
+    
+                                                    let msg = ClientMessage::event(event);
+                                                    let _ = client
+                                                        .send_msg_to(Settings::get().relays, msg)
+                                                        .await;
+                                                } else {
+                                                    self.show_amount_input = false;
+                                                    println!(
+                                                        "Value {} is out of the order range",
+                                                        value
+                                                    );
+                                                }
+                                            }
+                                            Err(_) => {
+                                                self.show_amount_input = false;
+                                                println!("Invalid amount input. Please enter a valid number.");
+                                            }
+                                        }
+                                    } else if self.show_order {
+                                        if order.max_amount.is_some() {
+                                            self.show_amount_input = true;
+                                            self.show_order = false;
+                                        } else {
+                                            // TODO: Implement https://mostro.network/protocol/key_management.html
+                                            let take_buy_message = Message::new_order(
+                                                None,
+                                                Some(order.id.unwrap()),
+                                                Action::TakeBuy,
+                                                None,
+                                            )
+                                            .as_json()
+                                            .unwrap();
+                                            println!(
+                                                "Taking the order {} for {} {}, with payment method {}",
+                                                order.id.unwrap(),
+                                                order.fiat_amount,
+                                                order.fiat_code,
+                                                order.payment_method
+                                            );
+                                            let event = gift_wrap(
+                                                &self.my_keys,
+                                                self.mostro_pubkey,
+                                                take_buy_message,
+                                                None,
+                                                0,
+                                            )
+                                            .unwrap();
+    
+                                            let msg = ClientMessage::event(event);
+                                            let _ =
+                                                client.send_msg_to(Settings::get().relays, msg).await;
+                                            self.show_order = false;
+                                        }
+                                    } else {
+                                        self.show_order = true;
+                                    }
                                 }
                             }
                         }
