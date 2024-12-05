@@ -365,14 +365,19 @@ impl App {
                                                     self.show_amount_input = false;
                                                     self.show_order = false;
                                                     // TODO: Implement https://mostro.network/protocol/key_management.html
-                                                    let take_sell_message = Message::new_order(
+                                                    let take_sell_message = match Message::new_order(
                                                         None,
                                                         Some(order.id.unwrap()),
                                                         Action::TakeSell,
                                                         Some(Content::Amount(value)),
                                                     )
-                                                    .as_json()
-                                                    .unwrap();
+                                                    .as_json() {
+                                                        Ok(message) => message,
+                                                        Err(e) => {
+                                                            println!("Error serializing message to JSON: {}", e);
+                                                            return;
+                                                        }
+                                                    };                                                    
     
                                                     println!(
                                                         "Taking the order {} for {} {} with payment method {}",
@@ -382,14 +387,19 @@ impl App {
                                                         order.payment_method
                                                     );
     
-                                                    let event = gift_wrap(
+                                                    let event = match gift_wrap(
                                                         &self.my_keys,
                                                         self.mostro_pubkey,
                                                         take_sell_message,
                                                         None,
                                                         0,
-                                                    )
-                                                    .unwrap();
+                                                    ) {
+                                                        Ok(event) => event,
+                                                        Err(e) => {
+                                                            println!("Error creating event: {}", e);
+                                                            return;
+                                                        }
+                                                    };
     
                                                     let msg = ClientMessage::event(event);
                                                     let _ = client
@@ -414,14 +424,20 @@ impl App {
                                             self.show_order = false;
                                         } else {
                                             // TODO: Implement https://mostro.network/protocol/key_management.html
-                                            let take_sell_message = Message::new_order(
+                                            let take_sell_message = match Message::new_order(
                                                 None,
                                                 Some(order.id.unwrap()),
                                                 Action::TakeSell,
                                                 None,
                                             )
-                                            .as_json()
-                                            .unwrap();
+                                            .as_json() {
+                                                Ok(message) => message,
+                                                Err(e) => {
+                                                    println!("Error serializing message to JSON: {}", e);
+                                                    return;
+                                                }
+                                            };
+                                            
                                             println!(
                                                 "Taking the order {} for {} {}, with payment method {}",
                                                 order.id.unwrap(),
@@ -429,14 +445,19 @@ impl App {
                                                 order.fiat_code,
                                                 order.payment_method
                                             );
-                                            let event = gift_wrap(
+                                            let event = match gift_wrap(
                                                 &self.my_keys,
                                                 self.mostro_pubkey,
                                                 take_sell_message,
                                                 None,
                                                 0,
-                                            )
-                                            .unwrap();
+                                            ) {
+                                                Ok(event) => event,
+                                                Err(e) => {
+                                                    println!("Error creating event: {}", e);
+                                                    return;
+                                                }
+                                            };
     
                                             let msg = ClientMessage::event(event);
                                             let _ =
@@ -456,14 +477,19 @@ impl App {
                                                     self.show_amount_input = false;
                                                     self.show_order = false;
                                                     // TODO: Implement https://mostro.network/protocol/key_management.html
-                                                    let take_buy_message = Message::new_order(
+                                                    let take_buy_message = match Message::new_order(
                                                         None,
                                                         Some(order.id.unwrap()),
                                                         Action::TakeBuy,
                                                         Some(Content::Amount(value)),
                                                     )
-                                                    .as_json()
-                                                    .unwrap();
+                                                    .as_json() {
+                                                        Ok(message) => message,
+                                                        Err(e) => {
+                                                            println!("Error serializing message to JSON: {}", e);
+                                                            return;
+                                                        }
+                                                    };
     
                                                     println!(
                                                         "Taking the order {} for {} {} with payment method {}",
@@ -473,15 +499,20 @@ impl App {
                                                         order.payment_method
                                                     );
     
-                                                    let event = gift_wrap(
+                                                    let event = match gift_wrap(
                                                         &self.my_keys,
                                                         self.mostro_pubkey,
                                                         take_buy_message,
                                                         None,
                                                         0,
-                                                    )
-                                                    .unwrap();
-    
+                                                    ) {
+                                                        Ok(event) => event,
+                                                        Err(e) => {
+                                                            println!("Error creating event: {}", e);
+                                                            return;
+                                                        }
+                                                    };
+
                                                     let msg = ClientMessage::event(event);
                                                     let _ = client
                                                         .send_msg_to(Settings::get().relays, msg)
@@ -505,14 +536,20 @@ impl App {
                                             self.show_order = false;
                                         } else {
                                             // TODO: Implement https://mostro.network/protocol/key_management.html
-                                            let take_buy_message = Message::new_order(
+                                            let take_buy_message = match Message::new_order(
                                                 None,
                                                 Some(order.id.unwrap()),
                                                 Action::TakeBuy,
                                                 None,
                                             )
-                                            .as_json()
-                                            .unwrap();
+                                            .as_json() {
+                                                Ok(message) => message,
+                                                Err(e) => {
+                                                    println!("Error serializing message to JSON: {}", e);
+                                                    return;
+                                                }
+                                            };
+                                            
                                             println!(
                                                 "Taking the order {} for {} {}, with payment method {}",
                                                 order.id.unwrap(),
@@ -520,14 +557,19 @@ impl App {
                                                 order.fiat_code,
                                                 order.payment_method
                                             );
-                                            let event = gift_wrap(
+                                            let event = match gift_wrap(
                                                 &self.my_keys,
                                                 self.mostro_pubkey,
                                                 take_buy_message,
                                                 None,
                                                 0,
-                                            )
-                                            .unwrap();
+                                            ) {
+                                                Ok(event) => event,
+                                                Err(e) => {
+                                                    println!("Error creating event: {}", e);
+                                                    return;
+                                                }
+                                            };
     
                                             let msg = ClientMessage::event(event);
                                             let _ =
