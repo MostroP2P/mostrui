@@ -208,7 +208,7 @@ impl App {
                 .title("Amount input".to_string())
                 .bg(color)
                 .title_style(Style::new().fg(Color::White))
-                .title_bottom(format!("ESC to close, ENTER to send fiat amount")); 
+                .title_bottom(format!("ESC to close, ENTER to send fiat amount"));
             let selected = self.orders.state.read().unwrap().table_state.selected();
             let state = self.orders.state.read().unwrap();
             let order = match selected {
@@ -315,6 +315,95 @@ impl App {
         frame.render_widget(settings_widget, area);
     }
 
+    async fn take_order(&mut self, order: Order, action: Action, client: &Client) -> Result<()> {
+        if self.show_amount_input {
+            match self.amount_input.value().parse::<i64>() {
+                Ok(value) => {
+                    if value >= order.min_amount.unwrap_or(10)
+                        && value <= order.max_amount.unwrap_or(500)
+                    {
+                        self.show_amount_input = false;
+                        self.show_order = false;
+
+                        // TODO: Implement https://mostro.network/protocol/key_management.html
+                        let order_id = match order.id {
+                            Some(id) => id,
+                            None => {
+                                println!("Order ID is missing");
+                                return Err("Order ID is missing".into());
+                            }
+                        };
+                        let message = Message::new_order(
+                            None,
+                            Some(order_id),
+                            action,
+                            Some(Content::Amount(value)),
+                        )
+                        .as_json()
+                        .map_err(|e| format!("Error serializing message to JSON: {}", e))?;
+
+                        println!(
+                            "Taking the order {} for {} {} with payment method {}",
+                            order.id.unwrap(),
+                            value,
+                            order.fiat_code,
+                            order.payment_method
+                        );
+
+                        let event = gift_wrap(&self.my_keys, self.mostro_pubkey, message, None, 0)
+                            .map_err(|e| format!("Error creating event: {}", e))?;
+
+                        let msg = ClientMessage::event(event);
+                        client.send_msg_to(Settings::get().relays, msg).await?;
+                    } else {
+                        self.show_amount_input = false;
+                        println!("Value {} is out of the order range", value);
+                    }
+                }
+                Err(_) => {
+                    self.show_amount_input = false;
+                    println!("Invalid amount input. Please enter a valid number.");
+                }
+            }
+        } else if self.show_order {
+            if order.max_amount.is_some() {
+                self.show_amount_input = true;
+                self.show_order = false;
+            } else {
+                // TODO: Implement https://mostro.network/protocol/key_management.html
+                let order_id = match order.id {
+                    Some(id) => id,
+                    None => {
+                        println!("Order ID is missing");
+                        return Err("Order ID is missing".into());
+                    }
+                };
+                let message = Message::new_order(None, Some(order_id), action, None)
+                    .as_json()
+                    .map_err(|e| format!("Error serializing message to JSON: {}", e))?;
+
+                println!(
+                    "Taking the order {} for {} {}, with payment method {}",
+                    order.id.unwrap(),
+                    order.fiat_amount,
+                    order.fiat_code,
+                    order.payment_method
+                );
+
+                let event = gift_wrap(&self.my_keys, self.mostro_pubkey, message, None, 0)
+                    .map_err(|e| format!("Error creating event: {}", e))?;
+
+                let msg = ClientMessage::event(event);
+                client.send_msg_to(Settings::get().relays, msg).await?;
+                self.show_order = false;
+            }
+        } else {
+            self.show_order = true;
+        }
+
+        Ok(())
+    }
+
     async fn handle_event(&mut self, event: &Event, client: Client) {
         if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Press {
@@ -347,7 +436,11 @@ impl App {
                         }
                     }
                     KeyCode::Enter => {
-                        if self.selected_tab == 0 || self.show_order || self.show_amount_input || self.show_invoice_input {
+                        if self.selected_tab == 0
+                            || self.show_order
+                            || self.show_amount_input
+                            || self.show_invoice_input
+                        {
                             let order = {
                                 let state = self.orders.state.read().unwrap();
                                 let selected = state.table_state.selected();
@@ -355,107 +448,32 @@ impl App {
                             };
 
                             if let Some(order) = order {
-                                if order.kind == Some(OrderKind::Sell) {
-                                    if self.show_amount_input {
-                                        match self.amount_input.value().parse::<i64>() {
-                                            Ok(value) => {
-                                                if value >= order.min_amount.unwrap_or(10)
-                                                    && value <= order.max_amount.unwrap_or(500)
-                                                {
-                                                    self.show_amount_input = false;
-                                                    self.show_order = false;
-                                                    // TODO: Implement https://mostro.network/protocol/key_management.html
-                                                    let take_sell_message = Message::new_order(
-                                                        None,
-                                                        Some(order.id.unwrap()),
-                                                        Action::TakeSell,
-                                                        Some(Content::Amount(value)),
-                                                    )
-                                                    .as_json()
-                                                    .unwrap();
-    
-                                                    println!(
-                                                        "Taking the order {} for {} {} with payment method {}",
-                                                        order.id.unwrap(),
-                                                        value,
-                                                        order.fiat_code,
-                                                        order.payment_method
-                                                    );
-    
-                                                    let event = gift_wrap(
-                                                        &self.my_keys,
-                                                        self.mostro_pubkey,
-                                                        take_sell_message,
-                                                        None,
-                                                        0,
-                                                    )
-                                                    .unwrap();
-    
-                                                    let msg = ClientMessage::event(event);
-                                                    let _ = client
-                                                        .send_msg_to(Settings::get().relays, msg)
-                                                        .await;
-                                                } else {
-                                                    self.show_amount_input = false;
-                                                    println!(
-                                                        "Value {} is out of the order range",
-                                                        value
-                                                    );
-                                                }
-                                            }
-                                            Err(_) => {
-                                                self.show_amount_input = false;
-                                                println!("Invalid amount input. Please enter a valid number.");
+                                if let Some(kind) = order.kind {
+                                    match kind {
+                                        OrderKind::Sell => {
+                                            if let Err(e) = self
+                                                .take_order(order, Action::TakeSell, &client)
+                                                .await
+                                            {
+                                                println!("Error handling order: {}", e);
                                             }
                                         }
-                                    } else if self.show_order {
-                                        if order.max_amount.is_some() {
-                                            self.show_amount_input = true;
-                                            self.show_order = false;
-                                        } else {
-                                            // TODO: Implement https://mostro.network/protocol/key_management.html
-                                            let take_sell_message = Message::new_order(
-                                                None,
-                                                Some(order.id.unwrap()),
-                                                Action::TakeSell,
-                                                None,
-                                            )
-                                            .as_json()
-                                            .unwrap();
-                                            println!(
-                                                "Taking the order {} for {} {}, with payment method {}",
-                                                order.id.unwrap(),
-                                                order.fiat_amount,
-                                                order.fiat_code,
-                                                order.payment_method
-                                            );
-                                            let event = gift_wrap(
-                                                &self.my_keys,
-                                                self.mostro_pubkey,
-                                                take_sell_message,
-                                                None,
-                                                0,
-                                            )
-                                            .unwrap();
-    
-                                            let msg = ClientMessage::event(event);
-                                            let _ =
-                                                client.send_msg_to(Settings::get().relays, msg).await;
-                                            self.show_order = false;
+                                        OrderKind::Buy => {
+                                            if let Err(e) = self
+                                                .take_order(order, Action::TakeBuy, &client)
+                                                .await
+                                            {
+                                                println!("Error handling order: {}", e);
+                                            }
                                         }
-                                    } else {
-                                        self.show_order = true;
                                     }
-                                } else if order.kind == Some(OrderKind::Buy) {                                    
-                                    println!("Purchase order cannot be taken for now.")
-                                    // TODO: take purchase orders
                                 }
                             }
                         }
                     }
                     KeyCode::Esc => {
                         self.show_order = false;
-                        self.show_amount_input = false;                   
+                        self.show_amount_input = false;
                     }
                     _ => {
                         if self.show_amount_input {
