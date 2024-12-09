@@ -46,7 +46,7 @@ $ cargo run
 ## Progress Overview
 - [x] Displays order list
 - [x] Settings tab
-- [ ] Take orders (Buy & Sell)
+- [x] Take orders (Buy & Sell)
 - [ ] Posts Orders (Buy & Sell)
 - [ ] Direct message with peers (use nip-17)
 - [ ] Fiat sent
