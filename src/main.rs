@@ -1,18 +1,20 @@
 pub mod db;
-pub mod nip59;
 pub mod settings;
+pub mod take_buy;
+pub mod take_sell;
 pub mod util;
 
-use crate::db::connect;
-use crate::nip59::{gift_wrap, unwrap_gift_wrap};
+use crate::db::{connect, User};
 use crate::settings::{get_settings_path, init_global_settings, Settings};
+use crate::take_buy::take_buy;
+use crate::take_sell::take_sell;
 use crate::util::order_from_tags;
+
 use chrono::{DateTime, Local, TimeZone};
-use mostro_core::message::{Action, Content, Message};
+use mostro_core::message::{Action, Message, Payload};
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
-use nostr_sdk::Kind::ParameterizedReplaceable;
 use ratatui::layout::Flex;
 use ratatui::style::Color;
 use ratatui::widgets::{Clear, Paragraph, Wrap};
@@ -43,10 +45,6 @@ use widgets::settings_widget::SettingsWidget;
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
 
-// TODO: generate keys for each order (maker or taker)
-// pubkey 000001273664dafe71d01c4541b726864bc430471f106eb48afc988ef6443a15
-const MY_PRIVATE_KEY: &str = "e02e5a36e3439b2df5172976bb58398ab2507306471c903c3820e1bcd57cd10b";
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let settings_path = get_settings_path();
@@ -55,41 +53,48 @@ async fn main() -> Result<()> {
     // Create config global var
     init_global_settings(Settings::new(settings_file_path)?);
     let terminal = ratatui::init();
-    let author = PublicKey::from_str(Settings::get().mostro_pubkey.as_str())?;
-    let app = App::new(author);
-    let _db = connect().await?;
+    let mostro = PublicKey::from_str(Settings::get().mostro_pubkey.as_str())?;
+    let pool = connect().await?;
 
-    let client = Client::new(&app.my_keys);
-    let relays = Settings::get().relays.clone();
-    for relay in relays {
-        client.add_relay(relay).await?;
-    }
-    client.connect().await;
+    let identity_keys = User::get_identity_keys(&pool)
+        .await
+        .map_err(|e| format!("Failed to get identity keys: {}", e))?;
 
-    let since = chrono::Utc::now() - chrono::Duration::days(1);
-    let timestamp = since.timestamp();
-    let since = Timestamp::from_secs(timestamp as u64);
-    // Here subscribe to get orders
-    let orders_sub_id = SubscriptionId::new("orders-sub-id");
-    let filter = Filter::new()
-        .author(author)
-        .kind(ParameterizedReplaceable(NOSTR_REPLACEABLE_EVENT_KIND))
+    let (trade_keys, trade_index) = User::get_next_trade_keys(&pool)
+        .await
+        .map_err(|e| format!("Failed to get trade keys: {}", e))?;
+    let app = App::new(mostro, identity_keys, trade_keys, trade_index);
+    // Call function to connect to relays
+    let client = util::connect_nostr().await?;
+
+    let since_time = chrono::Utc::now()
+        .checked_sub_signed(chrono::Duration::days(7))
+        .unwrap()
+        .timestamp() as u64;
+    let timestamp = Timestamp::from(since_time);
+
+    let filters = Filter::new()
+        .author(mostro)
+        .limit(20)
+        .since(timestamp)
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Y), vec!["mostro"])
         .custom_tag(SingleLetterTag::lowercase(Alphabet::Z), vec!["order"])
-        .since(since);
+        .kind(Kind::Custom(NOSTR_REPLACEABLE_EVENT_KIND));
+    // Here subscribe to get orders
+    let orders_sub_id = SubscriptionId::new("orders-sub-id");
     client
-        .subscribe_with_id(orders_sub_id, vec![filter], None)
+        .subscribe_with_id(orders_sub_id, vec![filters], None)
         .await?;
 
     // Here subscribe to get messages
-    let messages_sub_id = SubscriptionId::new("messages-sub-id");
-    let filter = Filter::new()
-        .pubkey(app.my_keys.public_key())
-        .kinds([Kind::GiftWrap, Kind::PrivateDirectMessage])
-        .since(since);
-    client
-        .subscribe_with_id(messages_sub_id, vec![filter], None)
-        .await?;
+    // let messages_sub_id = SubscriptionId::new("messages-sub-id");
+    // let filter = Filter::new()
+    //     .pubkey(app.my_keys.public_key())
+    //     .kinds([Kind::GiftWrap, Kind::PrivateDirectMessage])
+    //     .since(timestamp);
+    // client
+    //     .subscribe_with_id(messages_sub_id, vec![filter], None)
+    //     .await?;
     let app_result = app.run(terminal, client).await;
     ratatui::restore();
 
@@ -98,7 +103,9 @@ async fn main() -> Result<()> {
 
 #[derive(Debug)]
 struct App {
-    my_keys: Keys,
+    trade_keys: Keys,
+    identity_keys: Keys,
+    trade_index: i64,
     mostro_pubkey: PublicKey,
     should_quit: bool,
     show_order: bool,
@@ -113,11 +120,18 @@ struct App {
 impl App {
     const FRAMES_PER_SECOND: f32 = 60.0;
 
-    pub fn new(mostro_pubkey: PublicKey) -> Self {
+    pub fn new(
+        mostro_pubkey: PublicKey,
+        identity_keys: Keys,
+        trade_keys: Keys,
+        trade_index: i64,
+    ) -> Self {
         let amount_input = Input::default();
 
         Self {
-            my_keys: Keys::parse(MY_PRIVATE_KEY).unwrap(),
+            identity_keys,
+            trade_keys,
+            trade_index,
             mostro_pubkey,
             should_quit: false,
             show_order: false,
@@ -130,14 +144,9 @@ impl App {
         }
     }
 
-    // TODO: Implement https://mostro.network/protocol/key_management.html
-    //pub fn generate_new_keys(&mut self) {
-    //  self.my_keys = Keys::generate();
-    //}
-
     pub async fn run(mut self, mut terminal: DefaultTerminal, client: Client) -> Result<()> {
         self.orders.run(client.clone());
-        self.messages.run(client.clone(), self.my_keys.clone());
+        self.messages.run(client.clone(), self.trade_keys.clone());
 
         let period = Duration::from_secs_f32(1.0 / Self::FRAMES_PER_SECOND);
         let mut interval = tokio::time::interval(period);
@@ -311,7 +320,7 @@ impl App {
 
     fn render_settings_tab(&self, frame: &mut Frame, area: Rect) {
         let settings_widget =
-            SettingsWidget::new(self.mostro_pubkey, self.my_keys.secret_key().clone());
+            SettingsWidget::new(self.mostro_pubkey, self.trade_keys.secret_key().clone());
         frame.render_widget(settings_widget, area);
     }
 
@@ -334,14 +343,21 @@ impl App {
                             }
                         };
                         let message = Message::new_order(
-                            None,
                             Some(order_id),
+                            None,
+                            Some(self.trade_index),
                             action,
-                            Some(Content::Amount(value)),
+                            Some(Payload::Amount(value)),
                         )
                         .as_json()
                         .map_err(|e| format!("Error serializing message to JSON: {}", e))?;
-
+                        let sig = Message::sign(message.clone(), &self.trade_keys);
+                        // We compose the content
+                        let content = serde_json::to_string(&(message, sig)).unwrap();
+                        // We create the rumor
+                        let rumor = EventBuilder::text_note(content)
+                            .pow(0)
+                            .build(self.trade_keys.public_key());
                         println!(
                             "Taking the order {} for {} {} with payment method {}",
                             order.id.unwrap(),
@@ -349,9 +365,13 @@ impl App {
                             order.fiat_code,
                             order.payment_method
                         );
-
-                        let event = gift_wrap(&self.my_keys, self.mostro_pubkey, message, None, 0)
-                            .map_err(|e| format!("Error creating event: {}", e))?;
+                        let event = EventBuilder::gift_wrap(
+                            &self.trade_keys,
+                            &self.mostro_pubkey,
+                            rumor,
+                            [],
+                        )
+                        .await?;
 
                         let msg = ClientMessage::event(event);
                         client.send_msg_to(Settings::get().relays, msg).await?;
@@ -378,9 +398,18 @@ impl App {
                         return Err("Order ID is missing".into());
                     }
                 };
-                let message = Message::new_order(None, Some(order_id), action, None)
-                    .as_json()
-                    .map_err(|e| format!("Error serializing message to JSON: {}", e))?;
+                let message =
+                    Message::new_order(Some(order_id), None, Some(self.trade_index), action, None)
+                        .as_json()
+                        .map_err(|e| format!("Error serializing message to JSON: {}", e))?;
+
+                let sig = Message::sign(message.clone(), &self.trade_keys);
+                // We compose the content
+                let content = serde_json::to_string(&(message, sig)).unwrap();
+                // We create the rumor
+                let rumor = EventBuilder::text_note(content)
+                    .pow(0)
+                    .build(self.trade_keys.public_key());
 
                 println!(
                     "Taking the order {} for {} {}, with payment method {}",
@@ -390,8 +419,9 @@ impl App {
                     order.payment_method
                 );
 
-                let event = gift_wrap(&self.my_keys, self.mostro_pubkey, message, None, 0)
-                    .map_err(|e| format!("Error creating event: {}", e))?;
+                let event =
+                    EventBuilder::gift_wrap(&self.trade_keys, &self.mostro_pubkey, rumor, [])
+                        .await?;
 
                 let msg = ClientMessage::event(event);
                 client.send_msg_to(Settings::get().relays, msg).await?;
@@ -451,20 +481,10 @@ impl App {
                                 if let Some(kind) = order.kind {
                                     match kind {
                                         OrderKind::Sell => {
-                                            if let Err(e) = self
-                                                .take_order(order, Action::TakeSell, &client)
-                                                .await
-                                            {
-                                                println!("Error handling order: {}", e);
-                                            }
+                                            take_sell(order, &client);
                                         }
                                         OrderKind::Buy => {
-                                            if let Err(e) = self
-                                                .take_order(order, Action::TakeBuy, &client)
-                                                .await
-                                            {
-                                                println!("Error handling order: {}", e);
-                                            }
+                                            take_buy(order, &client);
                                         }
                                     }
                                 }
@@ -557,52 +577,52 @@ impl MostroListWidget {
     }
 
     fn handle_message_event(&self, event: nostr_sdk::Event, my_keys: Keys) -> Result<()> {
-        match event.kind {
-            Kind::GiftWrap => {
-                let unwrapped_gift = match unwrap_gift_wrap(Some(&my_keys), None, None, &event) {
-                    Ok(u) => u,
-                    Err(_) => {
-                        return Err("Error unwrapping gift".into());
-                    }
-                };
-                let dm = DM {
-                    id: event.id.to_string(),
-                    kind: event.kind,
-                    sender: unwrapped_gift.sender,
-                    content: unwrapped_gift.rumor.content.clone(),
-                    created_at: unwrapped_gift.rumor.created_at.as_u64(),
-                };
-                let mut state = self.state.write().unwrap();
-                state.messages.retain(|m| m.id != dm.id);
+        // match event.kind {
+        //     Kind::GiftWrap => {
+        //         let unwrapped_gift = match unwrap_gift_wrap(Some(&my_keys), None, None, &event) {
+        //             Ok(u) => u,
+        //             Err(_) => {
+        //                 return Err("Error unwrapping gift".into());
+        //             }
+        //         };
+        //         let dm = DM {
+        //             id: event.id.to_string(),
+        //             kind: event.kind,
+        //             sender: unwrapped_gift.sender,
+        //             content: unwrapped_gift.rumor.content.clone(),
+        //             created_at: unwrapped_gift.rumor.created_at.as_u64(),
+        //         };
+        //         let mut state = self.state.write().unwrap();
+        //         state.messages.retain(|m| m.id != dm.id);
 
-                state.messages.push(dm);
-                state.loading_state = LoadingState::Loaded;
+        //         state.messages.push(dm);
+        //         state.loading_state = LoadingState::Loaded;
 
-                if !state.messages.is_empty() {
-                    state.table_state.select(Some(0));
-                }
-                // Handle possible messages from mostro
-                let message = Message::from_json(&unwrapped_gift.rumor.content).unwrap();
-                match message.get_inner_message_kind().action {
-                    Action::AddInvoice => {
-                        // TODO: find a way of get a mutable reference to app
-                        // app.show_invoice_input = true;
-                    }
-                    Action::NewOrder => {
-                        todo!("New order created message");
-                    }
-                    Action::CantDo => {
-                        println!("CantDo message");
-                    }
-                    Action::Rate => {
-                        println!("Rate message");
-                    }
-                    _ => {}
-                }
-            }
-            Kind::PrivateDirectMessage => todo!("Handle PrivateDirectMessage"),
-            _ => {}
-        }
+        //         if !state.messages.is_empty() {
+        //             state.table_state.select(Some(0));
+        //         }
+        //         // Handle possible messages from mostro
+        //         let message = Message::from_json(&unwrapped_gift.rumor.content).unwrap();
+        //         match message.get_inner_message_kind().action {
+        //             Action::AddInvoice => {
+        //                 // TODO: find a way of get a mutable reference to app
+        //                 // app.show_invoice_input = true;
+        //             }
+        //             Action::NewOrder => {
+        //                 todo!("New order created message");
+        //             }
+        //             Action::CantDo => {
+        //                 println!("CantDo message");
+        //             }
+        //             Action::Rate => {
+        //                 println!("Rate message");
+        //             }
+        //             _ => {}
+        //         }
+        //     }
+        //     Kind::PrivateDirectMessage => todo!("Handle PrivateDirectMessage"),
+        //     _ => {}
+        // }
 
         Ok(())
     }

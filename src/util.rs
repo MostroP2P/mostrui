@@ -1,3 +1,5 @@
+use crate::Settings;
+
 use mostro_core::order::{Kind as OrderKind, SmallOrder as Order, Status};
 use nostr_sdk::prelude::*;
 use std::str::FromStr;
@@ -57,4 +59,20 @@ pub fn order_from_tags(event: Event) -> Result<Order> {
     }
 
     Ok(order)
+}
+
+pub async fn connect_nostr() -> Result<Client> {
+    let my_keys = Keys::generate();
+
+    let relays = Settings::get().relays.clone();
+    // Create new client
+    let client = Client::new(my_keys);
+    // Add relays
+    for r in relays.into_iter() {
+        client.add_relay(r).await?;
+    }
+    // Connect to relays and keep connection alive
+    client.connect().await;
+
+    Ok(client)
 }
