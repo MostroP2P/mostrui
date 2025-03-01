@@ -62,8 +62,6 @@ impl Settings {
             println!("Settings file not found: {}", file_name);
             return Err(ConfigError::NotFound(file_name));
         }
-        println!("Loading settings from: {}", file_name);
-
         let s = Config::builder()
             .add_source(File::with_name(&file_name).required(true))
             // Add in settings from the environment (with a prefix of APP)

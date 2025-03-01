@@ -8,7 +8,6 @@ use sqlx::Sqlite;
 use sqlx::SqlitePool;
 use std::fs::File;
 use std::path::Path;
-use std::thread::sleep;
 
 pub async fn connect() -> Result<Pool<Sqlite>> {
     let mostrui_dir = get_settings_path();

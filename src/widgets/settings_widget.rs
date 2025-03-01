@@ -1,4 +1,4 @@
-use nostr_sdk::prelude::{PublicKey, SecretKey};
+use nostr_sdk::prelude::PublicKey;
 use nostr_sdk::ToBech32;
 use ratatui::{
     buffer::Buffer,
@@ -10,12 +10,12 @@ use std::str::FromStr;
 
 pub struct SettingsWidget {
     pub pubkey: PublicKey,
-    pub secret: SecretKey,
+    pub mnemonc: String,
 }
 
 impl SettingsWidget {
-    pub fn new(pubkey: PublicKey, secret: SecretKey) -> Self {
-        Self { pubkey, secret }
+    pub fn new(pubkey: PublicKey, mnemonc: String) -> Self {
+        Self { pubkey, mnemonc }
     }
 }
 
@@ -32,9 +32,9 @@ impl Widget for SettingsWidget {
         render_block(
             layout[1],
             buf,
-            "Secret key 🔑",
+            "Mnemonic 🔑",
             "Be mindful of this information",
-            &self.secret.to_bech32().unwrap(),
+            &self.mnemonc,
         );
     }
 }

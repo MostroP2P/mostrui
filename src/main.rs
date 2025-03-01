@@ -63,7 +63,14 @@ async fn main() -> Result<()> {
     let (trade_keys, trade_index) = User::get_next_trade_keys(&pool)
         .await
         .map_err(|e| format!("Failed to get trade keys: {}", e))?;
-    let app = App::new(mostro, identity_keys, trade_keys, trade_index);
+    let user = User::get(&pool).await?;
+    let app = App::new(
+        mostro,
+        identity_keys,
+        trade_keys,
+        trade_index,
+        user.mnemonic,
+    );
     // Call function to connect to relays
     let client = util::connect_nostr().await?;
 
@@ -105,6 +112,7 @@ async fn main() -> Result<()> {
 struct App {
     trade_keys: Keys,
     identity_keys: Keys,
+    mnemonic: String,
     trade_index: i64,
     mostro_pubkey: PublicKey,
     should_quit: bool,
@@ -125,6 +133,7 @@ impl App {
         identity_keys: Keys,
         trade_keys: Keys,
         trade_index: i64,
+        mnemonic: String,
     ) -> Self {
         let amount_input = Input::default();
 
@@ -133,6 +142,7 @@ impl App {
             trade_keys,
             trade_index,
             mostro_pubkey,
+            mnemonic,
             should_quit: false,
             show_order: false,
             selected_tab: 0,
@@ -319,8 +329,7 @@ impl App {
     }
 
     fn render_settings_tab(&self, frame: &mut Frame, area: Rect) {
-        let settings_widget =
-            SettingsWidget::new(self.mostro_pubkey, self.trade_keys.secret_key().clone());
+        let settings_widget = SettingsWidget::new(self.mostro_pubkey, self.mnemonic.clone());
         frame.render_widget(settings_widget, area);
     }
 
