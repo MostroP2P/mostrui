@@ -369,8 +369,8 @@ pub struct App {
     pub should_quit: bool,
     pub show_order: bool,
     pub selected_tab: usize,
-    pub orders: OrderListWidget,
-    pub messages: MostroListWidget,
+    orders: OrderListWidget,
+    messages: MostroListWidget,
     pub show_amount_input: bool,
     pub show_invoice_input: bool,
     pub amount_input: Input,
@@ -633,7 +633,7 @@ impl App {
                                 if let Some(kind) = order.kind {
                                     match kind {
                                         OrderKind::Sell => {
-                                            take_sell(self, order, &client);
+                                            take_sell(self, order, &client).await;
                                         }
                                         OrderKind::Buy => {
                                             take_buy(order, &client);

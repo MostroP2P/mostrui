@@ -12,7 +12,7 @@ repository = "https://github.com/MostroP2P/mostrui"
 chrono = { version = "0.4.40", features = ["clock"] }
 config = "0.15.8"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
-mostro-core = "0.6.28"
+mostro-core = "0.6.30"
 nostr-sdk = { version = "0.38.0", features = ["nip06", "nip44", "nip59"] }
 ratatui = "0.29.0"
 serde = "1.0.218"
@@ -21,3 +21,5 @@ tokio = { version = "1.43.0", features = ["full"] }
 tui-input = "0.11.1"
 uuid = "1.15.1"
 bip39 = { version = "2.1.0", features = ["rand"] }
+fern = "0.7.1"
+log = "0.4.26"

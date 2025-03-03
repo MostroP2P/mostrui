@@ -9,17 +9,44 @@ pub mod widgets;
 use crate::app::App;
 use crate::db::{connect, User};
 use crate::settings::{get_settings_path, init_global_settings, Settings};
-use std::str::FromStr;
 
+use chrono::Local;
+use fern::Dispatch;
+use log::{debug, error, info, warn};
 use mostro_core::NOSTR_REPLACEABLE_EVENT_KIND;
 use nostr_sdk::prelude::*;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::OnceLock;
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
 
+/// Initialize logger
+fn setup_logger() -> Result<(), fern::InitError> {
+    Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{}] [{}] - {}",
+                Local::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Debug)
+        .chain(fern::log_file("app.log")?) // Guarda en logs/app.log
+        .apply()?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    setup_logger().expect("No se pudo iniciar el logger");
+
+    info!("Aplicación corriendo...");
+    debug!("Valor de x = {}", 42);
+    warn!("Advertencia de prueba");
+    error!("Error crítico");
+
     let settings_path = get_settings_path();
     let settings_file_path = PathBuf::from(settings_path);
 
