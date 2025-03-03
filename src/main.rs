@@ -21,8 +21,8 @@ use std::sync::OnceLock;
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
 
-/// Initialize logger
-fn setup_logger() -> Result<(), fern::InitError> {
+/// Initialize logger function
+fn setup_logger(level: log::LevelFilter) -> Result<(), fern::InitError> {
     Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -32,7 +32,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
                 message
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(level)
         .chain(fern::log_file("app.log")?) // Guarda en logs/app.log
         .apply()?;
     Ok(())
@@ -40,15 +40,22 @@ fn setup_logger() -> Result<(), fern::InitError> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    setup_logger().expect("No se pudo iniciar el logger");
-
-    info!("Application started");
-
+    info!("Mostrui started");
     let settings_path = get_settings_path();
     let settings_file_path = PathBuf::from(settings_path);
 
     // Create config global var
     init_global_settings(Settings::new(settings_file_path)?);
+    let level = Settings::get().log_level;
+    let level = match level.as_str() {
+        "debug" => log::LevelFilter::Debug,
+        "info" => log::LevelFilter::Info,
+        "warn" => log::LevelFilter::Warn,
+        "error" => log::LevelFilter::Error,
+        _ => log::LevelFilter::Info,
+    };
+    // Initialize logger
+    setup_logger(level).expect("Can't initialize logger");
     let terminal = ratatui::init();
     let mostro = PublicKey::from_str(Settings::get().mostro_pubkey.as_str())?;
     let pool = connect().await?;
