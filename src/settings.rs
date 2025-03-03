@@ -16,6 +16,7 @@ use std::{
 pub struct Settings {
     pub mostro_pubkey: String,
     pub relays: Vec<String>,
+    pub log_level: String,
 }
 
 #[cfg(windows)]
