@@ -42,10 +42,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
 async fn main() -> Result<()> {
     setup_logger().expect("No se pudo iniciar el logger");
 
-    info!("Aplicación corriendo...");
-    debug!("Valor de x = {}", 42);
-    warn!("Advertencia de prueba");
-    error!("Error crítico");
+    info!("Application started");
 
     let settings_path = get_settings_path();
     let settings_file_path = PathBuf::from(settings_path);
